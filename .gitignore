@@ -12,3 +12,5 @@ phidias.log
 *.stl
 *.obj
 *.glb
+mint/node_modules/
+mint/package-lock.json
