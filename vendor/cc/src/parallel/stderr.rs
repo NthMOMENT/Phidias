@@ -1,10 +1,9 @@
-#![cfg_attr(target_family = "wasm", allow(unused))]
-/// Helpers functions for [`ChildStderr`].
+/// Helpers functions for [ChildStderr].
 use std::{convert::TryInto, process::ChildStderr};
 
 use crate::{Error, ErrorKind};
 
-#[cfg(all(not(unix), not(windows), not(target_family = "wasm")))]
+#[cfg(all(not(unix), not(windows)))]
 compile_error!("Only unix and windows support non-blocking pipes! For other OSes, disable the parallel feature.");
 
 #[cfg(unix)]
@@ -25,7 +24,7 @@ fn get_flags(fd: std::os::unix::io::RawFd) -> Result<i32, Error> {
 }
 
 #[cfg(unix)]
-fn set_flags(fd: std::os::unix::io::RawFd, flags: core::ffi::c_int) -> Result<(), Error> {
+fn set_flags(fd: std::os::unix::io::RawFd, flags: std::os::raw::c_int) -> Result<(), Error> {
     if unsafe { libc::fcntl(fd, libc::F_SETFL, flags) } == -1 {
         Err(Error::new(
             ErrorKind::IOError,
@@ -54,7 +53,7 @@ pub fn bytes_available(stderr: &mut ChildStderr) -> Result<usize, Error> {
     let mut bytes_available = 0;
     #[cfg(windows)]
     {
-        use ::find_msvc_tools::windows_sys::PeekNamedPipe;
+        use crate::windows::windows_sys::PeekNamedPipe;
         use std::os::windows::io::AsRawHandle;
         use std::ptr::null_mut;
         if unsafe {

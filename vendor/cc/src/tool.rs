@@ -1,9 +1,3 @@
-use crate::{
-    command_helpers::{run_output, spawn_and_wait_for_output, CargoOutput},
-    run,
-    tempfile::NamedTempfile,
-    Error, ErrorKind, OutputKind,
-};
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -11,11 +5,16 @@ use std::{
     ffi::{OsStr, OsString},
     io::Write,
     path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
-    sync::RwLock,
+    process::{Command, Stdio},
+    sync::Mutex,
 };
 
-pub(crate) type CompilerFamilyLookupCache = HashMap<Box<[Box<OsStr>]>, ToolFamily>;
+use crate::{
+    command_helpers::{run_output, CargoOutput},
+    run,
+    tempfile::NamedTempfile,
+    Error, ErrorKind,
+};
 
 /// Configuration used to represent an invocation of a C compiler.
 ///
@@ -39,32 +38,15 @@ pub struct Tool {
 }
 
 impl Tool {
-    pub(crate) fn from_find_msvc_tools(tool: ::find_msvc_tools::Tool) -> Self {
-        let mut cc_tool = Self::with_family(
-            tool.path().into(),
-            ToolFamily::Msvc {
-                clang_cl: tool.is_clang_cl(),
-            },
-        );
-
-        cc_tool.env = tool
-            .env()
-            .into_iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-
-        cc_tool
-    }
-
     pub(crate) fn new(
         path: PathBuf,
-        cached_compiler_family: &RwLock<CompilerFamilyLookupCache>,
+        cached_compiler_family: &Mutex<HashMap<Box<Path>, ToolFamily>>,
         cargo_output: &CargoOutput,
         out_dir: Option<&Path>,
     ) -> Self {
         Self::with_features(
             path,
-            vec![],
+            None,
             false,
             cached_compiler_family,
             cargo_output,
@@ -72,16 +54,16 @@ impl Tool {
         )
     }
 
-    pub(crate) fn with_args(
+    pub(crate) fn with_clang_driver(
         path: PathBuf,
-        args: Vec<String>,
-        cached_compiler_family: &RwLock<CompilerFamilyLookupCache>,
+        clang_driver: Option<&str>,
+        cached_compiler_family: &Mutex<HashMap<Box<Path>, ToolFamily>>,
         cargo_output: &CargoOutput,
         out_dir: Option<&Path>,
     ) -> Self {
         Self::with_features(
             path,
-            args,
+            clang_driver,
             false,
             cached_compiler_family,
             cargo_output,
@@ -106,192 +88,111 @@ impl Tool {
 
     pub(crate) fn with_features(
         path: PathBuf,
-        args: Vec<String>,
+        clang_driver: Option<&str>,
         cuda: bool,
-        cached_compiler_family: &RwLock<CompilerFamilyLookupCache>,
+        cached_compiler_family: &Mutex<HashMap<Box<Path>, ToolFamily>>,
         cargo_output: &CargoOutput,
         out_dir: Option<&Path>,
     ) -> Self {
         fn is_zig_cc(path: &Path, cargo_output: &CargoOutput) -> bool {
             run_output(
-                Command::new(path).arg("--version"),
+                Command::new(&path).arg("--version"),
+                path,
                 // tool detection issues should always be shown as warnings
                 cargo_output,
             )
             .map(|o| String::from_utf8_lossy(&o).contains("ziglang"))
             .unwrap_or_default()
-                || {
-                    match path.file_name().map(OsStr::to_string_lossy) {
-                        Some(fname) => fname.contains("zig"),
-                        _ => false,
-                    }
-                }
-        }
-
-        fn guess_family_from_stdout(
-            stdout: &str,
-            path: &Path,
-            args: &[String],
-            cargo_output: &CargoOutput,
-        ) -> Result<ToolFamily, Error> {
-            cargo_output.print_debug(&stdout);
-
-            // https://gitlab.kitware.com/cmake/cmake/-/blob/69a2eeb9dff5b60f2f1e5b425002a0fd45b7cadb/Modules/CMakeDetermineCompilerId.cmake#L267-271
-            // stdin is set to null to ensure that the help output is never paginated.
-            let accepts_cl_style_flags = run(
-                Command::new(path).args(args).arg("-?").stdin(Stdio::null()),
-                &{
-                    // the errors are not errors!
-                    let mut cargo_output = cargo_output.clone();
-                    cargo_output.warnings = cargo_output.debug;
-                    cargo_output.output = OutputKind::Discard;
-                    cargo_output
-                },
-            )
-            .is_ok();
-
-            let clang = stdout.contains(r#""clang""#);
-            let gcc = stdout.contains(r#""gcc""#);
-            let emscripten = stdout.contains(r#""emscripten""#);
-            let vxworks = stdout.contains(r#""VxWorks""#);
-
-            match (clang, accepts_cl_style_flags, gcc, emscripten, vxworks) {
-                (clang_cl, true, _, false, false) => Ok(ToolFamily::Msvc { clang_cl }),
-                (true, _, _, _, false) | (_, _, _, true, false) => Ok(ToolFamily::Clang {
-                    zig_cc: is_zig_cc(path, cargo_output),
-                }),
-                (false, false, true, _, false) | (_, _, _, _, true) => Ok(ToolFamily::Gnu),
-                (false, false, false, false, false) => {
-                    cargo_output.print_warning(&"Compiler family detection failed since it does not define `__clang__`, `__GNUC__`, `__EMSCRIPTEN__` or `__VXWORKS__`, also does not accept cl style flag `-?`, fallback to treating it as GNU");
-                    Err(Error::new(
-                        ErrorKind::ToolFamilyMacroNotFound,
-                        "Expects macro `__clang__`, `__GNUC__` or `__EMSCRIPTEN__`, `__VXWORKS__` or accepts cl style flag `-?`, but found none",
-                    ))
-                }
-            }
         }
 
         fn detect_family_inner(
             path: &Path,
-            args: &[String],
             cargo_output: &CargoOutput,
             out_dir: Option<&Path>,
         ) -> Result<ToolFamily, Error> {
-            let out_dir = out_dir
-                .map(Cow::Borrowed)
-                .unwrap_or_else(|| Cow::Owned(env::temp_dir()));
+            let tmp = NamedTempfile::new(
+                &out_dir
+                    .map(Cow::Borrowed)
+                    .unwrap_or_else(|| Cow::Owned(env::temp_dir())),
+                "detect_compiler_family.c",
+            )?;
+            tmp.file()
+                .write_all(include_bytes!("detect_compiler_family.c"))?;
 
-            // Ensure all the parent directories exist otherwise temp file creation
-            // will fail
-            std::fs::create_dir_all(&out_dir).map_err(|err| Error {
-                kind: ErrorKind::IOError,
-                message: format!("failed to create OUT_DIR '{}': {}", out_dir.display(), err)
-                    .into(),
-            })?;
-
-            let mut tmp =
-                NamedTempfile::new(&out_dir, "detect_compiler_family.c").map_err(|err| Error {
-                    kind: ErrorKind::IOError,
-                    message: format!(
-                        "failed to create detect_compiler_family.c temp file in '{}': {}",
-                        out_dir.display(),
-                        err
-                    )
-                    .into(),
-                })?;
-            let mut tmp_file = tmp.take_file().unwrap();
-            tmp_file.write_all(include_bytes!("detect_compiler_family.c"))?;
-            // Close the file handle *now*, otherwise the compiler may fail to open it on Windows
-            // (#1082). The file stays on disk and its path remains valid until `tmp` is dropped.
-            tmp_file.flush()?;
-            tmp_file.sync_data()?;
-            drop(tmp_file);
-
-            // When expanding the file, the compiler prints a lot of information to stderr
-            // that it is not an error, but related to expanding itself.
-            //
-            // cc would have to disable warning here to prevent generation of too many warnings.
-            let mut compiler_detect_output = cargo_output.clone();
-            compiler_detect_output.warnings = compiler_detect_output.debug;
-
-            let mut cmd = Command::new(path);
-            cmd.arg("-E").arg(tmp.path());
-
-            // The -Wslash-u-filename warning is normally part of stdout.
-            // But with clang-cl it can be part of stderr instead and exit with a
-            // non-zero exit code.
-            let mut captured_cargo_output = compiler_detect_output.clone();
-            captured_cargo_output.warnings = true;
-            let Output {
-                status,
-                stdout,
-                stderr,
-            } = spawn_and_wait_for_output(&mut cmd, &captured_cargo_output)?;
-
-            let stdout = if [&stdout, &stderr]
-                .iter()
-                .any(|o| String::from_utf8_lossy(o).contains("-Wslash-u-filename"))
-            {
-                run_output(
-                    Command::new(path).arg("-E").arg("--").arg(tmp.path()),
-                    &compiler_detect_output,
-                )?
-            } else {
-                if !status.success() {
-                    return Err(Error::new(
-                        ErrorKind::ToolExecError,
-                        format!(
-                            "command did not execute successfully (status code {status}): {cmd:?}"
-                        ),
-                    ));
-                }
-
-                stdout
-            };
-
+            let stdout = run_output(
+                Command::new(path).arg("-E").arg(tmp.path()),
+                path,
+                // When expanding the file, the compiler prints a lot of information to stderr
+                // that it is not an error, but related to expanding itself.
+                //
+                // cc would have to disable warning here to prevent generation of too many warnings.
+                &{
+                    let mut cargo_output = cargo_output.clone();
+                    cargo_output.warnings = cargo_output.debug;
+                    cargo_output
+                },
+            )?;
             let stdout = String::from_utf8_lossy(&stdout);
-            guess_family_from_stdout(&stdout, path, args, cargo_output)
+
+            cargo_output.print_debug(&stdout);
+
+            // https://gitlab.kitware.com/cmake/cmake/-/blob/69a2eeb9dff5b60f2f1e5b425002a0fd45b7cadb/Modules/CMakeDetermineCompilerId.cmake#L267-271
+            let accepts_cl_style_flags =
+                run(Command::new(path).arg("-?").stdout(Stdio::null()), path, &{
+                    // the errors are not errors!
+                    let mut cargo_output = cargo_output.clone();
+                    cargo_output.warnings = cargo_output.debug;
+                    cargo_output
+                })
+                .is_ok();
+
+            let clang = stdout.contains(r#""clang""#);
+            let gcc = stdout.contains(r#""gcc""#);
+
+            match (clang, accepts_cl_style_flags, gcc) {
+                (clang_cl, true, _) => Ok(ToolFamily::Msvc { clang_cl }),
+                (true, false, _) => Ok(ToolFamily::Clang {
+                    zig_cc: is_zig_cc(path, cargo_output),
+                }),
+                (false, false, true) => Ok(ToolFamily::Gnu),
+                (false, false, false) => {
+                    cargo_output.print_warning(&"Compiler family detection failed since it does not define `__clang__`, `__GNUC__` or `_MSC_VER`, fallback to treating it as GNU");
+                    Err(Error::new(
+                        ErrorKind::ToolFamilyMacroNotFound,
+                        "Expects macro `__clang__`, `__GNUC__` or `_MSC_VER`, but found none",
+                    ))
+                }
+            }
         }
-        let detect_family = |path: &Path, args: &[String]| -> Result<ToolFamily, Error> {
-            let cache_key = [path.as_os_str()]
-                .iter()
-                .cloned()
-                .chain(args.iter().map(OsStr::new))
-                .map(Into::into)
-                .collect();
-            if let Some(family) = cached_compiler_family.read().unwrap().get(&cache_key) {
+        let detect_family = |path: &Path| -> Result<ToolFamily, Error> {
+            if let Some(family) = cached_compiler_family.lock().unwrap().get(path) {
                 return Ok(*family);
             }
 
-            let family = detect_family_inner(path, args, cargo_output, out_dir)?;
+            let family = detect_family_inner(path, cargo_output, out_dir)?;
             cached_compiler_family
-                .write()
+                .lock()
                 .unwrap()
-                .insert(cache_key, family);
+                .insert(path.into(), family);
             Ok(family)
         };
 
-        let family = detect_family(&path, &args).unwrap_or_else(|e| {
+        let family = detect_family(&path).unwrap_or_else(|e| {
             cargo_output.print_warning(&format_args!(
-                "Compiler family detection failed due to error: {e}"
+                "Compiler family detection failed due to error: {}",
+                e
             ));
             match path.file_name().map(OsStr::to_string_lossy) {
                 Some(fname) if fname.contains("clang-cl") => ToolFamily::Msvc { clang_cl: true },
                 Some(fname) if fname.ends_with("cl") || fname == "cl.exe" => {
                     ToolFamily::Msvc { clang_cl: false }
                 }
-                Some(fname) if fname.contains("clang") => {
-                    let is_clang_cl = args
-                        .iter()
-                        .any(|a| a.strip_prefix("--driver-mode=") == Some("cl"));
-                    if is_clang_cl {
-                        ToolFamily::Msvc { clang_cl: true }
-                    } else {
-                        ToolFamily::Clang {
-                            zig_cc: is_zig_cc(&path, cargo_output),
-                        }
-                    }
-                }
+                Some(fname) if fname.contains("clang") => match clang_driver {
+                    Some("cl") => ToolFamily::Msvc { clang_cl: true },
+                    _ => ToolFamily::Clang {
+                        zig_cc: is_zig_cc(&path, cargo_output),
+                    },
+                },
                 Some(fname) if fname.contains("zig") => ToolFamily::Clang { zig_cc: true },
                 _ => ToolFamily::Gnu,
             }
@@ -361,7 +262,7 @@ impl Tool {
     /// Don't push optimization arg if it conflicts with existing args.
     pub(crate) fn push_opt_unless_duplicate(&mut self, flag: OsString) {
         if self.is_duplicate_opt_arg(&flag) {
-            eprintln!("Info: Ignoring duplicate arg {:?}", flag);
+            println!("Info: Ignoring duplicate arg {:?}", &flag);
         } else {
             self.push_cc_arg(flag);
         }
@@ -383,12 +284,16 @@ impl Tool {
         };
         cmd.args(&self.cc_wrapper_args);
 
-        cmd.args(self.args.iter().filter(|a| !self.removed_args.contains(a)));
+        let value = self
+            .args
+            .iter()
+            .filter(|a| !self.removed_args.contains(a))
+            .collect::<Vec<_>>();
+        cmd.args(&value);
 
         for (k, v) in self.env.iter() {
             cmd.env(k, v);
         }
-
         cmd
     }
 
@@ -471,18 +376,10 @@ impl Tool {
 
     /// Whether the tool is MSVC-like.
     pub fn is_like_msvc(&self) -> bool {
-        matches!(self.family, ToolFamily::Msvc { .. })
-    }
-
-    /// Whether the tool is `clang-cl`-based MSVC-like.
-    pub fn is_like_clang_cl(&self) -> bool {
-        matches!(self.family, ToolFamily::Msvc { clang_cl: true })
-    }
-
-    /// Supports using `--` delimiter to separate arguments and path to source files.
-    pub(crate) fn supports_path_delimiter(&self) -> bool {
-        // homebrew clang and zig-cc does not support this while stock version does
-        matches!(self.family, ToolFamily::Msvc { clang_cl: true }) && !self.cuda
+        match self.family {
+            ToolFamily::Msvc { .. } => true,
+            _ => false,
+        }
     }
 }
 
@@ -504,47 +401,28 @@ pub enum ToolFamily {
 
 impl ToolFamily {
     /// What the flag to request debug info for this family of tools look like
-    pub(crate) fn add_debug_flags(
-        &self,
-        cmd: &mut Tool,
-        debug_opt: &str,
-        dwarf_version: Option<u32>,
-    ) {
+    pub(crate) fn add_debug_flags(&self, cmd: &mut Tool, dwarf_version: Option<u32>) {
         match *self {
             ToolFamily::Msvc { .. } => {
                 cmd.push_cc_arg("-Z7".into());
             }
             ToolFamily::Gnu | ToolFamily::Clang { .. } => {
-                match debug_opt {
-                    // From https://doc.rust-lang.org/cargo/reference/profiles.html#debug
-                    "" | "0" | "false" | "none" => {
-                        debug_assert!(
-                            false,
-                            "earlier check should have avoided calling add_debug_flags"
-                        );
-                    }
-
-                    // line-directives-only is LLVM-specific; for GCC we have to treat it like "1"
-                    "line-directives-only" if cmd.is_like_clang() => {
-                        cmd.push_cc_arg("-gline-directives-only".into());
-                    }
-                    // Clang has -gline-tables-only, but it's an alias for -g1 anyway.
-                    // https://clang.llvm.org/docs/ClangCommandLineReference.html#cmdoption-clang-gline-tables-only
-                    "1" | "limited" | "line-tables-only" | "line-directives-only" => {
-                        cmd.push_cc_arg("-g1".into());
-                    }
-                    "2" | "true" | "full" => {
-                        cmd.push_cc_arg("-g".into());
-                    }
-                    _ => {
-                        // Err on the side of including too much info rather than too little.
-                        cmd.push_cc_arg("-g".into());
-                    }
-                }
-                if let Some(v) = dwarf_version {
-                    cmd.push_cc_arg(format!("-gdwarf-{v}").into());
-                }
+                cmd.push_cc_arg(
+                    dwarf_version
+                        .map_or_else(|| "-g".into(), |v| format!("-gdwarf-{}", v))
+                        .into(),
+                );
             }
+        }
+    }
+
+    /// What the flag to force frame pointers.
+    pub(crate) fn add_force_frame_pointer(&self, cmd: &mut Tool) {
+        match *self {
+            ToolFamily::Gnu | ToolFamily::Clang { .. } => {
+                cmd.push_cc_arg("-fno-omit-frame-pointer".into());
+            }
+            _ => (),
         }
     }
 
@@ -553,13 +431,6 @@ impl ToolFamily {
         match *self {
             ToolFamily::Msvc { .. } => "-W4",
             ToolFamily::Gnu | ToolFamily::Clang { .. } => "-Wall",
-        }
-    }
-
-    pub(crate) fn warnings_suppression_flags(&self) -> &'static str {
-        match *self {
-            ToolFamily::Msvc { .. } => "-W0",
-            ToolFamily::Gnu | ToolFamily::Clang { .. } => "-w",
         }
     }
 
