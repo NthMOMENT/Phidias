@@ -14,12 +14,11 @@ jobs:
       - name: Install Solana
         run: |
           sh -c "$(curl -sSfL https://release.solana.com/v1.18.26/install)"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          ls $HOME/.local/share/solana/install/active_release/bin/
 
       - name: Build
         run: |
-          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-          cargo build-sbf 2>&1
+          $HOME/.local/share/solana/install/active_release/bin/cargo-build-sbf 2>&1
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
