@@ -1,0 +1,28 @@
+name: Build Escrow Program
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Solana
+        run: |
+          sh -c "$(curl -sSfL https://release.solana.com/v1.18.26/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build-sbf 2>&1
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: phidias-escrow-so
+          path: target/deploy/phidias_escrow.so
