@@ -8,15 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Iterators which split strings on Grapheme Cluster, Word, or Sentence boundaries, according
-//! to the [Unicode Standard Annex #29](https://www.unicode.org/reports/tr29/) rules.
+//! Iterators which split strings on Grapheme Cluster, Word or Sentence boundaries, according
+//! to the [Unicode Standard Annex #29](http://www.unicode.org/reports/tr29/) rules.
 //!
 //! ```rust
+//! extern crate unicode_segmentation;
+//!
 //! use unicode_segmentation::UnicodeSegmentation;
 //!
 //! fn main() {
 //!     let s = "a̐éö̲\r\n";
-//!     let g = s.graphemes(true).collect::<Vec<&str>>();
+//!     let g = UnicodeSegmentation::graphemes(s, true).collect::<Vec<&str>>();
 //!     let b: &[_] = &["a̐", "é", "ö̲", "\r\n"];
 //!     assert_eq!(g, b);
 //!
@@ -44,7 +46,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! unicode-segmentation = "1"
+//! unicode-segmentation = "1.9.0"
 //! ```
 
 #![deny(missing_docs, unsafe_code)]
@@ -53,9 +55,6 @@
     html_favicon_url = "https://unicode-rs.github.io/unicode-rs_sm.png"
 )]
 #![no_std]
-
-#[cfg(test)]
-extern crate std;
 
 pub use grapheme::{GraphemeCursor, GraphemeIncomplete};
 pub use grapheme::{GraphemeIndices, Graphemes};
@@ -249,47 +248,47 @@ pub trait UnicodeSegmentation {
 
 impl UnicodeSegmentation for str {
     #[inline]
-    fn graphemes(&self, is_extended: bool) -> Graphemes<'_> {
+    fn graphemes(&self, is_extended: bool) -> Graphemes {
         grapheme::new_graphemes(self, is_extended)
     }
 
     #[inline]
-    fn grapheme_indices(&self, is_extended: bool) -> GraphemeIndices<'_> {
+    fn grapheme_indices(&self, is_extended: bool) -> GraphemeIndices {
         grapheme::new_grapheme_indices(self, is_extended)
     }
 
     #[inline]
-    fn unicode_words(&self) -> UnicodeWords<'_> {
+    fn unicode_words(&self) -> UnicodeWords {
         word::new_unicode_words(self)
     }
 
     #[inline]
-    fn unicode_word_indices(&self) -> UnicodeWordIndices<'_> {
+    fn unicode_word_indices(&self) -> UnicodeWordIndices {
         word::new_unicode_word_indices(self)
     }
 
     #[inline]
-    fn split_word_bounds(&self) -> UWordBounds<'_> {
+    fn split_word_bounds(&self) -> UWordBounds {
         word::new_word_bounds(self)
     }
 
     #[inline]
-    fn split_word_bound_indices(&self) -> UWordBoundIndices<'_> {
+    fn split_word_bound_indices(&self) -> UWordBoundIndices {
         word::new_word_bound_indices(self)
     }
 
     #[inline]
-    fn unicode_sentences(&self) -> UnicodeSentences<'_> {
+    fn unicode_sentences(&self) -> UnicodeSentences {
         sentence::new_unicode_sentences(self)
     }
 
     #[inline]
-    fn split_sentence_bounds(&self) -> USentenceBounds<'_> {
+    fn split_sentence_bounds(&self) -> USentenceBounds {
         sentence::new_sentence_bounds(self)
     }
 
     #[inline]
-    fn split_sentence_bound_indices(&self) -> USentenceBoundIndices<'_> {
+    fn split_sentence_bound_indices(&self) -> USentenceBoundIndices {
         sentence::new_sentence_bound_indices(self)
     }
 }

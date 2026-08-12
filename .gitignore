@@ -1,5 +1,3 @@
 target/
-vendor/
 vendor.tar.gz
-.cargo/
 Cargo.lock

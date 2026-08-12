@@ -8,8 +8,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::tables::grapheme::GraphemeCat;
 use core::cmp;
+
+use crate::tables::grapheme::GraphemeCat;
 
 /// External iterator for grapheme clusters and byte offsets.
 ///
@@ -176,11 +177,7 @@ enum GraphemeState {
     Regional,
     /// The codepoint after is Extended_Pictographic,
     /// so whether it's a boundary depends on pre-context according to GB11.
-    Emoji {
-        /// Whether the ZWJ char has been seen already an only a "\p{Extended_Pictographic} Extend*"
-        /// part of GB11 has to be checked
-        seen_zwj: bool,
-    },
+    Emoji,
 }
 
 /// Cursor-based segmenter for grapheme clusters.
@@ -427,7 +424,7 @@ impl GraphemeCursor {
         match self.state {
             GraphemeState::InCbConsonant => self.handle_incb_consonant(chunk, chunk_start),
             GraphemeState::Regional => self.handle_regional(chunk, chunk_start),
-            GraphemeState::Emoji { seen_zwj } => self.handle_emoji(chunk, chunk_start, seen_zwj),
+            GraphemeState::Emoji => self.handle_emoji(chunk, chunk_start),
             _ => {
                 if self.cat_before.is_none() && self.offset == chunk.len() + chunk_start {
                     let ch = chunk.chars().next_back().unwrap();
@@ -520,14 +517,14 @@ impl GraphemeCursor {
         for ch in chunk.chars().rev() {
             if self.grapheme_category(ch) != gr::GC_Regional_Indicator {
                 self.ris_count = Some(ris_count);
-                self.decide(ris_count % 2 == 0);
+                self.decide((ris_count % 2) == 0);
                 return;
             }
             ris_count += 1;
         }
         self.ris_count = Some(ris_count);
         if chunk_start == 0 {
-            self.decide(ris_count % 2 == 0);
+            self.decide((ris_count % 2) == 0);
         } else {
             self.pre_context_offset = Some(chunk_start);
             self.state = GraphemeState::Regional;
@@ -535,18 +532,13 @@ impl GraphemeCursor {
     }
 
     #[inline]
-    fn handle_emoji(&mut self, chunk: &str, chunk_start: usize, mut seen_zwj: bool) {
-        // \p{Extended_Pictographic} Extend* ZWJ 	× 	\p{Extended_Pictographic}
+    fn handle_emoji(&mut self, chunk: &str, chunk_start: usize) {
         use crate::tables::grapheme as gr;
         let mut iter = chunk.chars().rev();
-        if !seen_zwj {
-            if let Some(ch) = iter.next() {
-                if self.grapheme_category(ch) != gr::GC_ZWJ {
-                    self.decide(true);
-                    return;
-                } else {
-                    seen_zwj = true;
-                }
+        if let Some(ch) = iter.next() {
+            if self.grapheme_category(ch) != gr::GC_ZWJ {
+                self.decide(true);
+                return;
             }
         }
         for ch in iter {
@@ -566,7 +558,7 @@ impl GraphemeCursor {
             self.decide(true);
         } else {
             self.pre_context_offset = Some(chunk_start);
-            self.state = GraphemeState::Emoji { seen_zwj };
+            self.state = GraphemeState::Emoji;
         }
     }
 
@@ -624,9 +616,7 @@ impl GraphemeCursor {
             match self.cat_after.unwrap() {
                 gr::GC_InCB_Consonant => self.state = GraphemeState::InCbConsonant,
                 gr::GC_Regional_Indicator => self.state = GraphemeState::Regional,
-                gr::GC_Extended_Pictographic => {
-                    self.state = GraphemeState::Emoji { seen_zwj: false }
-                }
+                gr::GC_Extended_Pictographic => self.state = GraphemeState::Emoji,
                 _ => need_pre_context = self.cat_before.is_none(),
             }
             if need_pre_context {
@@ -657,7 +647,7 @@ impl GraphemeCursor {
                 self.is_boundary_result()
             }
             PairResult::Emoji => {
-                self.handle_emoji(&chunk[..offset_in_chunk], chunk_start, false);
+                self.handle_emoji(&chunk[..offset_in_chunk], chunk_start);
                 self.is_boundary_result()
             }
         }
@@ -810,14 +800,13 @@ impl GraphemeCursor {
                 self.cat_after = self.cat_before.take();
                 self.state = GraphemeState::Unknown;
                 if let Some(incb_linker_count) = self.incb_linker_count {
-                    self.incb_linker_count =
-                        if incb_linker_count > 0 && crate::tables::is_incb_linker(ch) {
-                            Some(incb_linker_count - 1)
-                        } else if crate::tables::derived_property::InCB_Extend(ch) {
-                            Some(incb_linker_count)
-                        } else {
-                            None
-                        };
+                    self.ris_count = if incb_linker_count > 0 && crate::tables::is_incb_linker(ch) {
+                        Some(incb_linker_count - 1)
+                    } else if crate::tables::derived_property::InCB_Extend(ch) {
+                        Some(incb_linker_count)
+                    } else {
+                        None
+                    };
                 }
                 if let Some(ris_count) = self.ris_count {
                     self.ris_count = if ris_count > 0 {
@@ -891,106 +880,4 @@ fn test_grapheme_cursor_prev_boundary_chunk_start() {
         Err(GraphemeIncomplete::PrevChunk)
     );
     assert_eq!(c.prev_boundary(&s[..2], 0), Ok(Some(1)));
-}
-
-#[test]
-fn test_grapheme_cursor_boundary_with_zwj_on_chunk_start() {
-    use GraphemeIncomplete::*;
-
-    let chunk0 = "👩"; // 4 bytes
-    let chunk1 = "\u{200d}🔬"; // 3 bytes + 4 bytes
-
-    let full_len = chunk0.len() + chunk1.len();
-
-    let mut cur = GraphemeCursor::new(0, full_len, true);
-    assert_eq!(cur.next_boundary(chunk0, 0), Err(NextChunk));
-    match cur.next_boundary(chunk1, chunk0.len()) {
-        Ok(res) => assert_eq!(res, Some(11)),
-        Err(PreContext(_)) => {
-            cur.provide_context(chunk0, 0);
-            assert_eq!(cur.next_boundary(chunk1, chunk0.len()), Ok(Some(11)));
-        }
-        _ => unreachable!(),
-    }
-}
-
-#[test]
-fn test_grapheme_cursor_emoji_no_zwj() {
-    use GraphemeIncomplete::*;
-    let chunk0 = "🍒"; // 4 bytes
-    let chunk1 = "🥑"; // 4 bytes
-    let full_len = chunk0.len() + chunk1.len();
-
-    let mut c = GraphemeCursor::new(0, full_len, true);
-    assert_eq!(c.next_boundary(chunk0, 0), Err(NextChunk));
-    assert_eq!(
-        c.next_boundary(chunk1, chunk0.len()),
-        Err(PreContext(chunk0.len()))
-    );
-    c.provide_context(chunk0, 0);
-    assert_eq!(c.next_boundary(chunk1, chunk0.len()), Ok(Some(4)));
-    assert_eq!(c.next_boundary(chunk1, chunk0.len()), Ok(Some(8)));
-    assert_eq!(c.next_boundary(chunk1, chunk0.len()), Ok(None));
-}
-
-#[test]
-fn test_grapheme_cursor_emoji_chunk_boundary_before_zwj() {
-    use GraphemeIncomplete::*;
-    let chunk0 = "🍒"; // 4 bytes
-    let chunk1 = "\u{200d}🥑"; // 3 + 4 bytes
-    let full_len = chunk0.len() + chunk1.len(); // 11
-
-    let mut c = GraphemeCursor::new(0, full_len, true);
-    assert_eq!(c.next_boundary(chunk0, 0), Err(NextChunk));
-    assert_eq!(
-        c.next_boundary(chunk1, chunk0.len()),
-        Err(PreContext(chunk0.len()))
-    );
-    c.provide_context(chunk0, 0);
-    assert_eq!(c.next_boundary(chunk1, chunk0.len()), Ok(Some(11)));
-    assert_eq!(c.next_boundary(chunk1, chunk0.len()), Ok(None));
-}
-
-#[test]
-fn test_grapheme_cursor_emoji_chunk_boundary_after_zwj() {
-    use GraphemeIncomplete::*;
-    let chunk0 = "🍒\u{200d}"; // 4 + 3 bytes
-    let chunk1 = "🥑"; // 4 bytes
-    let full_len = chunk0.len() + chunk1.len(); // 11
-
-    let mut c = GraphemeCursor::new(0, full_len, true);
-    assert_eq!(c.next_boundary(chunk0, 0), Err(NextChunk));
-    assert_eq!(
-        c.next_boundary(chunk1, chunk0.len()),
-        Err(PreContext(chunk0.len()))
-    );
-    c.provide_context(chunk0, 0);
-    assert_eq!(c.next_boundary(chunk1, chunk0.len()), Ok(Some(11)));
-    assert_eq!(c.next_boundary(chunk1, chunk0.len()), Ok(None));
-}
-
-#[test]
-fn test_grapheme_cursor_emoji_zwj_across_chunks() {
-    use GraphemeIncomplete::*;
-    let chunk0 = "🍒"; // 4 bytes
-    let chunk1 = "\u{200d}"; // 3 bytes
-    let chunk2 = "🥑"; // 4 bytes
-    let full_len = chunk0.len() + chunk1.len() + chunk2.len(); // 11
-    let chunk2_start = chunk0.len() + chunk1.len();
-
-    let mut c = GraphemeCursor::new(0, full_len, true);
-    assert_eq!(c.next_boundary(chunk0, 0), Err(NextChunk));
-    assert_eq!(c.next_boundary(chunk1, chunk0.len()), Err(NextChunk));
-    assert_eq!(
-        c.next_boundary(chunk2, chunk2_start),
-        Err(PreContext(chunk2_start))
-    );
-    c.provide_context(chunk1, chunk0.len());
-    assert_eq!(
-        c.next_boundary(chunk2, chunk2_start),
-        Err(PreContext(chunk0.len()))
-    );
-    c.provide_context(chunk0, 0);
-    assert_eq!(c.next_boundary(chunk2, chunk2_start), Ok(Some(11)));
-    assert_eq!(c.next_boundary(chunk2, chunk2_start), Ok(None));
 }
