@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "solana-sdk-macro"
-version = "1.18.26"
+version = "1.16.25"
 authors = ["Solana Labs Maintainers <maintainers@solanalabs.com>"]
 description = "Solana SDK Macro"
 homepage = "https://solanalabs.com/"
@@ -30,13 +30,13 @@ proc-macro = true
 version = "0.4.0"
 
 [dependencies.proc-macro2]
-version = "1.0.78"
+version = "1.0.59"
 
 [dependencies.quote]
 version = "1.0"
 
 [dependencies.rustversion]
-version = "1.0.14"
+version = "1.0.12"
 
 [dependencies.syn]
 version = "2.0"

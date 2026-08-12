@@ -30,10 +30,9 @@ impl Feature {
 
     pub fn from_account_info(account_info: &AccountInfo) -> Result<Self, ProgramError> {
         if *account_info.owner != id() {
-            return Err(ProgramError::InvalidAccountOwner);
+            return Err(ProgramError::InvalidArgument);
         }
-        bincode::deserialize(&account_info.data.borrow())
-            .map_err(|_| ProgramError::InvalidAccountData)
+        bincode::deserialize(&account_info.data.borrow()).map_err(|_| ProgramError::InvalidArgument)
     }
 }
 

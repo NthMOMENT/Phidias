@@ -1,5 +1,4 @@
 use super::*;
-use crate::error::IResult;
 use crate::error::InputError;
 use crate::Partial;
 
@@ -60,7 +59,7 @@ fn test_incomplete_bits() {
 
     assert!(result.is_err());
     let error = result.err().unwrap();
-    assert_eq!("Parsing requires 2 more data", error.to_string());
+    assert_eq!("Parsing requires 2 bytes/chars", error.to_string());
 }
 
 #[test]
@@ -70,7 +69,7 @@ fn test_take_complete_0() {
     assert_eq!(count, 0usize);
     let offset = 0usize;
 
-    let result: IResult<(&[u8], usize), usize> = take(count).parse_peek((input, offset));
+    let result: crate::IResult<(&[u8], usize), usize> = take(count).parse_peek((input, offset));
 
     assert_eq!(result, Ok(((input, offset), 0)));
 }
@@ -79,7 +78,7 @@ fn test_take_complete_0() {
 fn test_take_complete_eof() {
     let input = &[0b00010010][..];
 
-    let result: IResult<(&[u8], usize), usize> = take(1usize).parse_peek((input, 8));
+    let result: crate::IResult<(&[u8], usize), usize> = take(1usize).parse_peek((input, 8));
 
     assert_eq!(
         result,
@@ -94,7 +93,7 @@ fn test_take_complete_eof() {
 fn test_take_complete_span_over_multiple_bytes() {
     let input = &[0b00010010, 0b00110100, 0b11111111, 0b11111111][..];
 
-    let result: IResult<(&[u8], usize), usize> = take(24usize).parse_peek((input, 4));
+    let result: crate::IResult<(&[u8], usize), usize> = take(24usize).parse_peek((input, 4));
 
     assert_eq!(
         result,
@@ -109,33 +108,33 @@ fn test_take_partial_0() {
     assert_eq!(count, 0usize);
     let offset = 0usize;
 
-    let result: IResult<(_, usize), usize> = take(count).parse_peek((input, offset));
+    let result: crate::IResult<(_, usize), usize> = take(count).parse_peek((input, offset));
 
     assert_eq!(result, Ok(((input, offset), 0)));
 }
 
 #[test]
-fn test_pattern_partial_ok() {
+fn test_tag_partial_ok() {
     let input = Partial::new(&[0b00011111][..]);
     let offset = 0usize;
     let bits_to_take = 4usize;
-    let value_to_pattern = 0b0001;
+    let value_to_tag = 0b0001;
 
-    let result: IResult<(_, usize), usize> =
-        pattern(value_to_pattern, bits_to_take).parse_peek((input, offset));
+    let result: crate::IResult<(_, usize), usize> =
+        tag(value_to_tag, bits_to_take).parse_peek((input, offset));
 
-    assert_eq!(result, Ok(((input, bits_to_take), value_to_pattern)));
+    assert_eq!(result, Ok(((input, bits_to_take), value_to_tag)));
 }
 
 #[test]
-fn test_pattern_partial_err() {
+fn test_tag_partial_err() {
     let input = Partial::new(&[0b00011111][..]);
     let offset = 0usize;
     let bits_to_take = 4usize;
-    let value_to_pattern = 0b1111;
+    let value_to_tag = 0b1111;
 
-    let result: IResult<(_, usize), usize> =
-        pattern(value_to_pattern, bits_to_take).parse_peek((input, offset));
+    let result: crate::IResult<(_, usize), usize> =
+        tag(value_to_tag, bits_to_take).parse_peek((input, offset));
 
     assert_eq!(
         result,
@@ -150,7 +149,7 @@ fn test_pattern_partial_err() {
 fn test_bool_0_complete() {
     let input = [0b10000000].as_ref();
 
-    let result: IResult<(&[u8], usize), bool> = bool.parse_peek((input, 0));
+    let result: crate::IResult<(&[u8], usize), bool> = bool.parse_peek((input, 0));
 
     assert_eq!(result, Ok(((input, 1), true)));
 }
@@ -159,7 +158,7 @@ fn test_bool_0_complete() {
 fn test_bool_eof_complete() {
     let input = [0b10000000].as_ref();
 
-    let result: IResult<(&[u8], usize), bool> = bool.parse_peek((input, 8));
+    let result: crate::IResult<(&[u8], usize), bool> = bool.parse_peek((input, 8));
 
     assert_eq!(
         result,
@@ -174,7 +173,7 @@ fn test_bool_eof_complete() {
 fn test_bool_0_partial() {
     let input = Partial::new([0b10000000].as_ref());
 
-    let result: IResult<(Partial<&[u8]>, usize), bool> = bool.parse_peek((input, 0));
+    let result: crate::IResult<(Partial<&[u8]>, usize), bool> = bool.parse_peek((input, 0));
 
     assert_eq!(result, Ok(((input, 1), true)));
 }
@@ -183,7 +182,7 @@ fn test_bool_0_partial() {
 fn test_bool_eof_partial() {
     let input = Partial::new([0b10000000].as_ref());
 
-    let result: IResult<(Partial<&[u8]>, usize), bool> = bool.parse_peek((input, 8));
+    let result: crate::IResult<(Partial<&[u8]>, usize), bool> = bool.parse_peek((input, 8));
 
     assert_eq!(
         result,

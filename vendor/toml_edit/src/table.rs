@@ -165,15 +165,11 @@ impl Table {
     /// In the document above, tables `target` and `target."x86_64/windows.json"` are implicit.
     ///
     /// ```
-    /// # #[cfg(feature = "parse")] {
-    /// # #[cfg(feature = "display")] {
-    /// use toml_edit::DocumentMut;
-    /// let mut doc = "[a]\n[a.b]\n".parse::<DocumentMut>().expect("invalid toml");
+    /// use toml_edit::Document;
+    /// let mut doc = "[a]\n[a.b]\n".parse::<Document>().expect("invalid toml");
     ///
     /// doc["a"].as_table_mut().unwrap().set_implicit(true);
     /// assert_eq!(doc.to_string(), "[a.b]\n");
-    /// # }
-    /// # }
     /// ```
     pub fn set_implicit(&mut self, implicit: bool) {
         self.implicit = implicit;
@@ -194,12 +190,12 @@ impl Table {
         self.dotted
     }
 
-    /// Sets the position of the `Table` within the [`DocumentMut`][crate::DocumentMut].
+    /// Sets the position of the `Table` within the `Document`.
     pub fn set_position(&mut self, doc_position: usize) {
         self.doc_position = Some(doc_position);
     }
 
-    /// The position of the `Table` within the [`DocumentMut`][crate::DocumentMut].
+    /// The position of the `Table` within the `Document`.
     ///
     /// Returns `None` if the `Table` was created manually (i.e. not via parsing)
     /// in which case its position is set automatically.  This can be overridden with
@@ -218,34 +214,18 @@ impl Table {
         &self.decor
     }
 
-    /// Returns an accessor to a key's formatting
-    pub fn key(&self, key: &str) -> Option<&'_ Key> {
-        self.items.get(key).map(|kv| &kv.key)
-    }
-
-    /// Returns an accessor to a key's formatting
-    pub fn key_mut(&mut self, key: &str) -> Option<KeyMut<'_>> {
-        self.items.get_mut(key).map(|kv| kv.key.as_mut())
-    }
-
     /// Returns the decor associated with a given key of the table.
-    #[deprecated(since = "0.21.1", note = "Replaced with `key_mut`")]
     pub fn key_decor_mut(&mut self, key: &str) -> Option<&mut Decor> {
-        #![allow(deprecated)]
-        self.items.get_mut(key).map(|kv| kv.key.leaf_decor_mut())
+        self.items.get_mut(key).map(|kv| &mut kv.key.decor)
     }
 
     /// Returns the decor associated with a given key of the table.
-    #[deprecated(since = "0.21.1", note = "Replaced with `key_mut`")]
     pub fn key_decor(&self, key: &str) -> Option<&Decor> {
-        #![allow(deprecated)]
-        self.items.get(key).map(|kv| kv.key.leaf_decor())
+        self.items.get(key).map(|kv| &kv.key.decor)
     }
 
-    /// The location within the original document
-    ///
-    /// This generally requires an [`ImDocument`][crate::ImDocument].
-    pub fn span(&self) -> Option<std::ops::Range<usize>> {
+    /// Returns the location within the original document
+    pub(crate) fn span(&self) -> Option<std::ops::Range<usize>> {
         self.span.clone()
     }
 
@@ -292,7 +272,7 @@ impl Table {
 
     /// Clears the table, removing all key-value pairs. Keeps the allocated memory for reuse.
     pub fn clear(&mut self) {
-        self.items.clear();
+        self.items.clear()
     }
 
     /// Gets the given key's corresponding entry in the Table for in-place manipulation.
@@ -433,15 +413,15 @@ impl Table {
     }
 }
 
-#[cfg(feature = "display")]
 impl std::fmt::Display for Table {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::encode::Encode;
         let children = self.get_values();
         // print table body
         for (key_path, value) in children {
-            crate::encode::encode_key_path_ref(&key_path, f, None, DEFAULT_KEY_DECOR)?;
+            key_path.as_slice().encode(f, None, DEFAULT_KEY_DECOR)?;
             write!(f, "=")?;
-            crate::encode::encode_value(value, f, None, DEFAULT_VALUE_DECOR)?;
+            value.encode(f, None, DEFAULT_VALUE_DECOR)?;
             writeln!(f)?;
         }
         Ok(())
@@ -491,20 +471,18 @@ impl<'s> IntoIterator for &'s Table {
 pub(crate) type KeyValuePairs = IndexMap<InternalString, TableKeyValue>;
 
 fn decorate_table(table: &mut Table) {
-    for (mut key, value) in table
+    for (key_decor, value) in table
         .items
         .iter_mut()
         .filter(|(_, kv)| kv.value.is_value())
-        .map(|(_, kv)| (kv.key.as_mut(), kv.value.as_value_mut().unwrap()))
+        .map(|(_, kv)| (&mut kv.key.decor, kv.value.as_value_mut().unwrap()))
     {
-        key.leaf_decor_mut().clear();
-        key.dotted_decor_mut().clear();
+        key_decor.clear();
         value.decor_mut().clear();
     }
 }
 
 // `key1 = value1`
-pub(crate) const DEFAULT_ROOT_DECOR: (&str, &str) = ("", "");
 pub(crate) const DEFAULT_KEY_DECOR: (&str, &str) = ("", " ");
 pub(crate) const DEFAULT_TABLE_DECOR: (&str, &str) = ("\n", "");
 pub(crate) const DEFAULT_KEY_PATH_DECOR: (&str, &str) = ("", "");
@@ -579,15 +557,9 @@ pub trait TableLike: crate::private::Sealed {
     /// Check if this is a wrapper for dotted keys, rather than a standard table
     fn is_dotted(&self) -> bool;
 
-    /// Returns an accessor to a key's formatting
-    fn key(&self, key: &str) -> Option<&'_ Key>;
-    /// Returns an accessor to a key's formatting
-    fn key_mut(&mut self, key: &str) -> Option<KeyMut<'_>>;
     /// Returns the decor associated with a given key of the table.
-    #[deprecated(since = "0.21.1", note = "Replaced with `key_mut`")]
     fn key_decor_mut(&mut self, key: &str) -> Option<&mut Decor>;
     /// Returns the decor associated with a given key of the table.
-    #[deprecated(since = "0.21.1", note = "Replaced with `key_mut`")]
     fn key_decor(&self, key: &str) -> Option<&Decor>;
 }
 
@@ -633,30 +605,22 @@ impl TableLike for Table {
         self.get_values()
     }
     fn fmt(&mut self) {
-        self.fmt();
+        self.fmt()
     }
     fn sort_values(&mut self) {
-        self.sort_values();
+        self.sort_values()
     }
     fn is_dotted(&self) -> bool {
         self.is_dotted()
     }
     fn set_dotted(&mut self, yes: bool) {
-        self.set_dotted(yes);
+        self.set_dotted(yes)
     }
 
-    fn key(&self, key: &str) -> Option<&'_ Key> {
-        self.key(key)
-    }
-    fn key_mut(&mut self, key: &str) -> Option<KeyMut<'_>> {
-        self.key_mut(key)
-    }
     fn key_decor_mut(&mut self, key: &str) -> Option<&mut Decor> {
-        #![allow(deprecated)]
         self.key_decor_mut(key)
     }
     fn key_decor(&self, key: &str) -> Option<&Decor> {
-        #![allow(deprecated)]
         self.key_decor(key)
     }
 }
@@ -743,7 +707,7 @@ impl<'a> OccupiedEntry<'a> {
         &mut self.entry.get_mut().value
     }
 
-    /// Converts the `OccupiedEntry` into a mutable reference to the value in the entry
+    /// Converts the OccupiedEntry into a mutable reference to the value in the entry
     /// with a lifetime bound to the map itself
     pub fn into_mut(self) -> &'a mut Item {
         &mut self.entry.into_mut().value
@@ -783,7 +747,7 @@ impl<'a> VacantEntry<'a> {
         self.entry.key().as_str()
     }
 
-    /// Sets the value of the entry with the `VacantEntry`'s key,
+    /// Sets the value of the entry with the VacantEntry's key,
     /// and returns a mutable reference to it
     pub fn insert(self, value: Item) -> &'a mut Item {
         let entry = self.entry;

@@ -3,7 +3,7 @@
 //! These are short recipes for accomplishing common tasks.
 //!
 //! - [Why `winnow`?][why]
-//! - [For `nom` users][nom]
+//! - [Migrating from `nom`][nom]
 //! - Formats:
 //!   - [Elements of Programming Languages][language]
 //!   - [Arithmetic][arithmetic]

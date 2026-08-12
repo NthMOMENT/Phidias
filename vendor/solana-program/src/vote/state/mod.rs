@@ -35,15 +35,6 @@ pub const MAX_EPOCH_CREDITS_HISTORY: usize = 64;
 // Offset of VoteState::prior_voters, for determining initialization status without deserialization
 const DEFAULT_PRIOR_VOTERS_OFFSET: usize = 114;
 
-// Number of slots of grace period for which maximum vote credits are awarded - votes landing within this number of slots of the slot that is being voted on are awarded full credits.
-pub const VOTE_CREDITS_GRACE_SLOTS: u8 = 2;
-
-// Maximum number of credits to award for a vote; this number of credits is awarded to votes on slots that land within the grace period. After that grace period, vote credits are reduced.
-pub const VOTE_CREDITS_MAXIMUM_PER_SLOT: u8 = 16;
-
-// Previous max per slot
-pub const VOTE_CREDITS_MAXIMUM_PER_SLOT_OLD: u8 = 8;
-
 #[frozen_abi(digest = "Ch2vVEwos2EjAVqSHCyJjnN2MNX1yrpapZTGhMSCjWUH")]
 #[derive(Serialize, Default, Deserialize, Debug, PartialEq, Eq, Clone, AbiExample)]
 pub struct Vote {
@@ -328,24 +319,6 @@ impl VoteState {
         }
     }
 
-    pub fn new_rand_for_tests(node_pubkey: Pubkey, root_slot: Slot) -> Self {
-        let votes = (1..32)
-            .map(|x| LandedVote {
-                latency: 0,
-                lockout: Lockout::new_with_confirmation_count(
-                    u64::from(x).saturating_add(root_slot),
-                    32_u32.saturating_sub(x),
-                ),
-            })
-            .collect();
-        Self {
-            node_pubkey,
-            root_slot: Some(root_slot),
-            votes,
-            ..VoteState::default()
-        }
-    }
-
     pub fn get_authorized_voter(&self, epoch: Epoch) -> Option<Pubkey> {
         self.authorized_voters.get_authorized_voter(epoch)
     }
@@ -446,14 +419,7 @@ impl VoteState {
         }
     }
 
-    pub fn process_next_vote_slot(
-        &mut self,
-        next_vote_slot: Slot,
-        epoch: Epoch,
-        current_slot: Slot,
-        timely_vote_credits: bool,
-        deprecate_unused_legacy_vote_plumbing: bool,
-    ) {
+    pub fn process_next_vote_slot(&mut self, next_vote_slot: Slot, epoch: Epoch) {
         // Ignore votes for slots earlier than we already have votes for
         if self
             .last_voted_slot()
@@ -462,30 +428,18 @@ impl VoteState {
             return;
         }
 
-        self.pop_expired_votes(next_vote_slot);
+        let lockout = Lockout::new(next_vote_slot);
 
-        let landed_vote = LandedVote {
-            latency: if timely_vote_credits || !deprecate_unused_legacy_vote_plumbing {
-                Self::compute_vote_latency(next_vote_slot, current_slot)
-            } else {
-                0
-            },
-            lockout: Lockout::new(next_vote_slot),
-        };
+        self.pop_expired_votes(next_vote_slot);
 
         // Once the stack is full, pop the oldest lockout and distribute rewards
         if self.votes.len() == MAX_LOCKOUT_HISTORY {
-            let credits = self.credits_for_vote_at_index(
-                0,
-                timely_vote_credits,
-                deprecate_unused_legacy_vote_plumbing,
-            );
-            let landed_vote = self.votes.pop_front().unwrap();
-            self.root_slot = Some(landed_vote.slot());
+            let vote = self.votes.pop_front().unwrap();
+            self.root_slot = Some(vote.slot());
 
-            self.increment_credits(epoch, credits);
+            self.increment_credits(epoch, 1);
         }
-        self.votes.push_back(landed_vote);
+        self.votes.push_back(lockout.into());
         self.double_lockouts();
     }
 
@@ -516,53 +470,6 @@ impl VoteState {
 
         self.epoch_credits.last_mut().unwrap().1 =
             self.epoch_credits.last().unwrap().1.saturating_add(credits);
-    }
-
-    // Computes the vote latency for vote on voted_for_slot where the vote itself landed in current_slot
-    pub fn compute_vote_latency(voted_for_slot: Slot, current_slot: Slot) -> u8 {
-        std::cmp::min(current_slot.saturating_sub(voted_for_slot), u8::MAX as u64) as u8
-    }
-
-    /// Returns the credits to award for a vote at the given lockout slot index
-    pub fn credits_for_vote_at_index(
-        &self,
-        index: usize,
-        timely_vote_credits: bool,
-        deprecate_unused_legacy_vote_plumbing: bool,
-    ) -> u64 {
-        let latency = self
-            .votes
-            .get(index)
-            .map_or(0, |landed_vote| landed_vote.latency);
-        let max_credits = if deprecate_unused_legacy_vote_plumbing {
-            VOTE_CREDITS_MAXIMUM_PER_SLOT
-        } else {
-            VOTE_CREDITS_MAXIMUM_PER_SLOT_OLD
-        };
-
-        // If latency is 0, this means that the Lockout was created and stored from a software version that did not
-        // store vote latencies; in this case, 1 credit is awarded
-        if latency == 0 || (deprecate_unused_legacy_vote_plumbing && !timely_vote_credits) {
-            1
-        } else {
-            match latency.checked_sub(VOTE_CREDITS_GRACE_SLOTS) {
-                None | Some(0) => {
-                    // latency was <= VOTE_CREDITS_GRACE_SLOTS, so maximum credits are awarded
-                    max_credits as u64
-                }
-
-                Some(diff) => {
-                    // diff = latency - VOTE_CREDITS_GRACE_SLOTS, and diff > 0
-                    // Subtract diff from VOTE_CREDITS_MAXIMUM_PER_SLOT which is the number of credits to award
-                    match max_credits.checked_sub(diff) {
-                        // If diff >= VOTE_CREDITS_MAXIMUM_PER_SLOT, 1 credit is awarded
-                        None | Some(0) => 1,
-
-                        Some(credits) => credits as u64,
-                    }
-                }
-            }
-        }
     }
 
     pub fn nth_recent_lockout(&self, position: usize) -> Option<&Lockout> {
@@ -779,11 +686,15 @@ pub mod serde_compact_vote_state_update {
         let lockout_offsets = vote_state_update.lockouts.iter().scan(
             vote_state_update.root.unwrap_or_default(),
             |slot, lockout| {
-                let Some(offset) = lockout.slot().checked_sub(*slot) else {
-                    return Some(Err(serde::ser::Error::custom("Invalid vote lockout")));
+                let offset = match lockout.slot().checked_sub(*slot) {
+                    None => return Some(Err(serde::ser::Error::custom("Invalid vote lockout"))),
+                    Some(offset) => offset,
                 };
-                let Ok(confirmation_count) = u8::try_from(lockout.confirmation_count()) else {
-                    return Some(Err(serde::ser::Error::custom("Invalid confirmation count")));
+                let confirmation_count = match u8::try_from(lockout.confirmation_count()) {
+                    Ok(confirmation_count) => confirmation_count,
+                    Err(_) => {
+                        return Some(Err(serde::ser::Error::custom("Invalid confirmation count")))
+                    }
                 };
                 let lockout_offset = LockoutOffset {
                     offset,
@@ -1307,8 +1218,8 @@ mod tests {
 
     fn run_serde_compact_vote_state_update<R: Rng>(rng: &mut R) {
         let lockouts: VecDeque<_> = std::iter::repeat_with(|| {
-            let slot = 149_303_885_u64.saturating_add(rng.gen_range(0..10_000));
-            let confirmation_count = rng.gen_range(0..33);
+            let slot = 149_303_885_u64.saturating_add(rng.gen_range(0, 10_000));
+            let confirmation_count = rng.gen_range(0, 33);
             Lockout::new_with_confirmation_count(slot, confirmation_count)
         })
         .take(32)
@@ -1317,7 +1228,7 @@ mod tests {
         let root = rng.gen_ratio(1, 2).then(|| {
             lockouts[0]
                 .slot()
-                .checked_sub(rng.gen_range(0..1_000))
+                .checked_sub(rng.gen_range(0, 1_000))
                 .expect("All slots should be greater than 1_000")
         });
         let timestamp = rng.gen_ratio(1, 2).then(|| rng.gen());

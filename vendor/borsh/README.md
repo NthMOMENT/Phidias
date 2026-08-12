@@ -1,10 +1,10 @@
-# Borsh in Rust &emsp; [![Latest Version]][crates.io] [![borsh: rustc 1.77+]][Rust 1.77] [![License Apache-2.0 badge]][License Apache-2.0] [![License MIT badge]][License MIT]
+# Borsh in Rust &emsp; [![Latest Version]][crates.io] [![borsh: rustc 1.55+]][Rust 1.55] [![License Apache-2.0 badge]][License Apache-2.0] [![License MIT badge]][License MIT]
 
 [Borsh]: https://borsh.io
 [Latest Version]: https://img.shields.io/crates/v/borsh.svg
 [crates.io]: https://crates.io/crates/borsh
-[borsh: rustc 1.77+]: https://img.shields.io/badge/rustc-1.77+-lightgray.svg
-[Rust 1.77]: https://blog.rust-lang.org/2024/03/21/Rust-1.77.0/
+[borsh: rustc 1.55+]: https://img.shields.io/badge/rustc-1.55+-lightgray.svg
+[Rust 1.55]: https://blog.rust-lang.org/2021/09/09/Rust-1.55.0.html
 [License Apache-2.0 badge]: https://img.shields.io/badge/license-Apache2.0-blue.svg
 [License Apache-2.0]: https://opensource.org/licenses/Apache-2.0
 [License MIT badge]: https://img.shields.io/badge/license-MIT-blue.svg
@@ -19,7 +19,7 @@ strict [specification](https://github.com/near/borsh#specification).
 ## Example
 
 ```rust
-use borsh::{BorshSerialize, BorshDeserialize, from_slice, to_vec};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug)]
 struct A {
@@ -33,31 +33,49 @@ fn test_simple_struct() {
         x: 3301,
         y: "liber primus".to_string(),
     };
-    let encoded_a = to_vec(&a).unwrap();
-    let decoded_a = from_slice::<A>(&encoded_a).unwrap();
+    let encoded_a = a.try_to_vec().unwrap();
+    let decoded_a = A::try_from_slice(&encoded_a).unwrap();
     assert_eq!(a, decoded_a);
 }
 ```
 
-## Docs shortcuts
+## Features
 
-Following pages are highlighted here just to give reader a chance at learning that
-they exist.  
+Opting out from Serde allows borsh to have some features that currently are not available for serde-compatible serializers.
+Currently we support two features: `borsh_init` and `borsh_skip` (the former one not available in Serde).
 
-- [Derive Macro `BorshSerialize`](./borsh/docs/rustdoc_include/borsh_serialize.md)
-- [Derive Macro `BorshDeserialize`](./borsh/docs/rustdoc_include/borsh_deserialize.md)
-- [Derive Macro `BorshSchema`](./borsh/docs/rustdoc_include/borsh_schema.md)
+`borsh_init` allows to automatically run an initialization function right after deserialization. This adds a lot of convenience for objects that are architectured to be used as strictly immutable. Usage example:
 
-## Advanced examples 
+```rust
+#[derive(BorshSerialize, BorshDeserialize)]
+#[borsh_init(init)]
+struct Message {
+    message: String,
+    timestamp: u64,
+    public_key: CryptoKey,
+    signature: CryptoSignature
+    hash: CryptoHash
+}
 
-Some of the less trivial examples are present in [examples](./borsh/examples) folder:
+impl Message {
+    pub fn init(&mut self) {
+        self.hash = CryptoHash::new().write_string(self.message).write_u64(self.timestamp);
+        self.signature.verify(self.hash, self.public_key);
+    }
+}
+```
 
-- [implementing `BorshSerialize`/`BorshDeserialize` for third-party `serde_json::Value`](./borsh/examples/serde_json_value.rs)
+`borsh_skip` allows to skip serializing/deserializing fields, assuming they implement `Default` trait, similary to `#[serde(skip)]`.
 
-## Testing
+```rust
+#[derive(BorshSerialize, BorshDeserialize)]
+struct A {
+    x: u64,
+    #[borsh_skip]
+    y: f32,
+}
+```
 
-Integration tests should generally be preferred to unit ones. Root module of integration tests of `borsh` crate is [linked](./borsh/tests/tests.rs) here.
- 
 ## Releasing
 
 The versions of all public crates in this repository are collectively managed by a single version in the [workspace manifest](https://github.com/near/borsh-rs/blob/master/Cargo.toml).

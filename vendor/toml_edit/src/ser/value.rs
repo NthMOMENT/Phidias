@@ -13,8 +13,6 @@ use super::Error;
 /// # Examples
 ///
 /// ```
-/// # #[cfg(feature = "parse")] {
-/// # #[cfg(feature = "display")] {
 /// use serde::Serialize;
 ///
 /// #[derive(Serialize)]
@@ -44,8 +42,6 @@ use super::Error;
 ///     toml_edit::ser::ValueSerializer::new()
 /// ).unwrap();
 /// println!("{}", value)
-/// # }
-/// # }
 /// ```
 #[derive(Default)]
 #[non_exhaustive]
@@ -144,9 +140,9 @@ impl serde::ser::Serializer for ValueSerializer {
         Err(Error::UnsupportedNone)
     }
 
-    fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
+    fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: serde::ser::Serialize + ?Sized,
+        T: serde::ser::Serialize,
     {
         value.serialize(self)
     }
@@ -168,18 +164,18 @@ impl serde::ser::Serializer for ValueSerializer {
         self.serialize_str(variant)
     }
 
-    fn serialize_newtype_struct<T>(
+    fn serialize_newtype_struct<T: ?Sized>(
         self,
         _name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: serde::ser::Serialize + ?Sized,
+        T: serde::ser::Serialize,
     {
         value.serialize(self)
     }
 
-    fn serialize_newtype_variant<T>(
+    fn serialize_newtype_variant<T: ?Sized>(
         self,
         _name: &'static str,
         _variant_index: u32,
@@ -187,7 +183,7 @@ impl serde::ser::Serializer for ValueSerializer {
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: serde::ser::Serialize + ?Sized,
+        T: serde::ser::Serialize,
     {
         let value = value.serialize(self)?;
         let mut table = crate::InlineTable::new();

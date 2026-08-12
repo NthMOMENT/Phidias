@@ -1,11 +1,10 @@
 [package]
 name = "toml_edit"
-version = "0.22.20"
+version = "0.20.7"
 keywords = ["encoding", "toml"]
 categories = ["encoding", "parser-implementations", "parsing", "config"]
 description = "Yet another format-preserving TOML parser."
 authors = ["Andronik Ordian <write@reusable.software>", "Ed Page <eopage@gmail.com>"]
-autotests = false
 repository.workspace = true
 license.workspace = true
 edition.workspace = true
@@ -27,9 +26,7 @@ pre-release-replacements = [
 ]
 
 [features]
-default = ["parse", "display"]
-parse = ["dep:winnow"]
-display = []
+default = []
 perf = ["dep:kstring"]
 serde = ["dep:serde", "toml_datetime/serde", "dep:serde_spanned"]
 # Provide a method disable_recursion_limit to parse arbitrarily deep structures
@@ -41,43 +38,31 @@ unbounded = []
 
 [dependencies]
 indexmap = { version = "2.0.0", features = ["std"] }
-winnow = { version = "0.6.18", optional = true }
+winnow = "0.5.0"
 serde = { version = "1.0.145", optional = true }
 kstring = { version = "2.0.0", features = ["max_inline"], optional = true }
-toml_datetime = { version = "0.6.8", path = "../toml_datetime" }
-serde_spanned = { version = "0.6.7", path = "../serde_spanned", features = ["serde"], optional = true }
+toml_datetime = { version = "0.6.5", path = "../toml_datetime" }
+serde_spanned = { version = "0.6.4", path = "../serde_spanned", features = ["serde"], optional = true }
 
 [dev-dependencies]
-serde_json = "1.0.116"
+serde_json = "1.0.96"
 toml-test-harness = "0.4.8"
-toml-test-data = "1.11.0"
-libtest-mimic = "0.7.2"
-snapbox = "0.6.0"
-proptest = "1.5.0"
-
-[[test]]
-name = "testsuite"
-required-features = ["parse", "display"]
+toml-test-data = "1.4.0"
+libtest-mimic = "0.6.0"
+snapbox = { version = "0.4.11", features = ["harness"] }
 
 [[test]]
 name = "decoder_compliance"
-required-features = ["parse"]
 harness = false
 
 [[test]]
 name = "encoder_compliance"
-required-features = ["parse", "display"]
 harness = false
 
 [[test]]
 name = "invalid"
-required-features = ["parse", "display"]
 harness = false
 
 [[example]]
 name = "visit"
-required-features = ["parse", "display"]
 test = true
-
-[lints]
-workspace = true

@@ -1,5 +1,5 @@
 mod json;
-mod parser_alt;
+mod parser;
 mod parser_dispatch;
 #[allow(dead_code)]
 mod parser_partial;
@@ -25,18 +25,18 @@ fn main() -> Result<(), lexopt::Error> {
     });
 
     let result = match args.implementation {
-        Impl::Naive => parser_alt::json::<ErrorKind>.parse(data),
+        Impl::Naive => parser::json::<ErrorKind>.parse(data),
         Impl::Dispatch => parser_dispatch::json::<ErrorKind>.parse(data),
     };
     match result {
         Ok(json) => {
-            println!("{json:#?}");
+            println!("{:#?}", json);
         }
         Err(err) => {
             if args.pretty {
-                println!("{err}");
+                println!("{}", err);
             } else {
-                println!("{err:#?}");
+                println!("{:#?}", err);
             }
         }
     }

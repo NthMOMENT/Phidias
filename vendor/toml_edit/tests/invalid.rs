@@ -1,4 +1,4 @@
-use toml_edit::DocumentMut;
+use toml_edit::Document;
 
 fn main() {
     let args = libtest_mimic::Arguments::from_args();
@@ -11,7 +11,7 @@ fn main() {
                     Ok(()) => "".to_owned(),
                     Err(err) => err,
                 };
-                snapbox::assert_data_eq!(err, snapbox::Data::read_from(&expect_path, None).raw());
+                snapbox::assert_eq_path(expect_path, err);
                 Ok(())
             })
         })
@@ -21,6 +21,6 @@ fn main() {
 
 fn run_case(input: &[u8]) -> Result<(), String> {
     let raw = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-    let _ = raw.parse::<DocumentMut>().map_err(|e| e.to_string())?;
+    let _ = raw.parse::<Document>().map_err(|e| e.to_string())?;
     Ok(())
 }

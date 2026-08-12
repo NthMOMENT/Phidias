@@ -6,7 +6,7 @@ use crate::*;
 #[doc(inline)]
 pub use crate::dispatch;
 
-/// Helper trait for the [`alt()`] combinator.
+/// Helper trait for the [alt()] combinator.
 ///
 /// This trait is implemented for tuples of up to 21 elements
 pub trait Alt<I, O, E> {
@@ -17,7 +17,7 @@ pub trait Alt<I, O, E> {
 /// Pick the first successful parser
 ///
 /// To stop on an error, rather than trying further cases, see
-/// [`cut_err`][crate::combinator::cut_err] ([example][crate::_tutorial::chapter_7]).
+/// [`cut_err`][crate::combinator::cut_err] ([example][crate::_tutorial::chapter_6]).
 ///
 /// For tight control over the error when no match is found, add a final case using [`fail`][crate::combinator::fail].
 /// Alternatively, with a [custom error type][crate::_topic::error], it is possible to track all
@@ -37,7 +37,7 @@ pub trait Alt<I, O, E> {
 ///   alt((alpha1, digit1)).parse_peek(input)
 /// };
 ///
-/// // the first parser, alpha1, takes the input
+/// // the first parser, alpha1, recognizes the input
 /// assert_eq!(parser("abc"), Ok(("", "abc")));
 ///
 /// // the first parser returns an error, so alt tries the second one
@@ -48,18 +48,13 @@ pub trait Alt<I, O, E> {
 /// # }
 /// ```
 #[doc(alias = "choice")]
-#[inline(always)]
-pub fn alt<Input: Stream, Output, Error, Alternatives>(
-    mut alternatives: Alternatives,
-) -> impl Parser<Input, Output, Error>
-where
-    Alternatives: Alt<Input, Output, Error>,
-    Error: ParserError<Input>,
-{
-    trace("alt", move |i: &mut Input| alternatives.choice(i))
+pub fn alt<I: Stream, O, E: ParserError<I>, List: Alt<I, O, E>>(
+    mut l: List,
+) -> impl Parser<I, O, E> {
+    trace("alt", move |i: &mut I| l.choice(i))
 }
 
-/// Helper trait for the [`permutation()`] combinator.
+/// Helper trait for the [permutation()] combinator.
 ///
 /// This trait is implemented for tuples of up to 21 elements
 pub trait Permutation<I, O, E> {
@@ -74,7 +69,7 @@ pub trait Permutation<I, O, E> {
 /// tuple of the parser results.
 ///
 /// To stop on an error, rather than trying further permutations, see
-/// [`cut_err`][crate::combinator::cut_err] ([example][crate::_tutorial::chapter_7]).
+/// [`cut_err`][crate::combinator::cut_err] ([example][crate::_tutorial::chapter_6]).
 ///
 /// # Example
 ///
@@ -88,7 +83,7 @@ pub trait Permutation<I, O, E> {
 ///   permutation((alpha1, digit1)).parse_peek(input)
 /// }
 ///
-/// // permutation takes alphabetic characters then digit
+/// // permutation recognizes alphabetic characters then digit
 /// assert_eq!(parser("abc123"), Ok(("", ("abc", "123"))));
 ///
 /// // but also in inverse order
@@ -116,10 +111,9 @@ pub trait Permutation<I, O, E> {
 ///
 /// // any parses 'a', then char('a') fails on 'b',
 /// // even though char('a') followed by any would succeed
-/// assert_eq!(parser("ab"), Err(ErrMode::Backtrack(InputError::new("b", ErrorKind::Tag))));
+/// assert_eq!(parser("ab"), Err(ErrMode::Backtrack(InputError::new("b", ErrorKind::Verify))));
 /// ```
 ///
-#[inline(always)]
 pub fn permutation<I: Stream, O, E: ParserError<I>, List: Permutation<I, O, E>>(
     mut l: List,
 ) -> impl Parser<I, O, E> {
@@ -132,7 +126,7 @@ impl<const N: usize, I: Stream, O, E: ParserError<I>, P: Parser<I, O, E>> Alt<I,
 
         let start = input.checkpoint();
         for branch in self {
-            input.reset(&start);
+            input.reset(start.clone());
             match branch.parse_next(input) {
                 Err(ErrMode::Backtrack(e)) => {
                     error = match error {
@@ -145,32 +139,7 @@ impl<const N: usize, I: Stream, O, E: ParserError<I>, P: Parser<I, O, E>> Alt<I,
         }
 
         match error {
-            Some(e) => Err(ErrMode::Backtrack(e.append(input, &start, ErrorKind::Alt))),
-            None => Err(ErrMode::assert(input, "`alt` needs at least one parser")),
-        }
-    }
-}
-
-impl<I: Stream, O, E: ParserError<I>, P: Parser<I, O, E>> Alt<I, O, E> for &mut [P] {
-    fn choice(&mut self, input: &mut I) -> PResult<O, E> {
-        let mut error: Option<E> = None;
-
-        let start = input.checkpoint();
-        for branch in self.iter_mut() {
-            input.reset(&start);
-            match branch.parse_next(input) {
-                Err(ErrMode::Backtrack(e)) => {
-                    error = match error {
-                        Some(error) => Some(error.or(e)),
-                        None => Some(e),
-                    };
-                }
-                res => return res,
-            }
-        }
-
-        match error {
-            Some(e) => Err(ErrMode::Backtrack(e.append(input, &start, ErrorKind::Alt))),
+            Some(e) => Err(ErrMode::Backtrack(e.append(input, ErrorKind::Alt))),
             None => Err(ErrMode::assert(input, "`alt` needs at least one parser")),
         }
     }
@@ -235,7 +204,7 @@ macro_rules! succ (
 
 macro_rules! alt_trait_inner(
   ($it:tt, $self:expr, $input:expr, $start:ident, $err:expr, $head:ident $($id:ident)+) => ({
-    $input.reset(&$start);
+    $input.reset($start.clone());
     match $self.$it.parse_next($input) {
       Err(ErrMode::Backtrack(e)) => {
         let err = $err.or(e);
@@ -245,14 +214,14 @@ macro_rules! alt_trait_inner(
     }
   });
   ($it:tt, $self:expr, $input:expr, $start:ident, $err:expr, $head:ident) => ({
-    Err(ErrMode::Backtrack($err.append($input, &$start, ErrorKind::Alt)))
+    Err(ErrMode::Backtrack($err.append($input, ErrorKind::Alt)))
   });
 );
 
 alt_trait!(Alt2 Alt3 Alt4 Alt5 Alt6 Alt7 Alt8 Alt9 Alt10 Alt11 Alt12 Alt13 Alt14 Alt15 Alt16 Alt17 Alt18 Alt19 Alt20 Alt21 Alt22);
 
 // Manually implement Alt for (A,), the 1-tuple type
-impl<I: Stream, O, E: ParserError<I>, A: Parser<I, O, E>> Alt<I, O, E> for (A,) {
+impl<I, O, E: ParserError<I>, A: Parser<I, O, E>> Alt<I, O, E> for (A,) {
     fn choice(&mut self, input: &mut I) -> PResult<O, E> {
         self.0.parse_next(input)
     }
@@ -297,8 +266,8 @@ macro_rules! permutation_trait_impl(
           // or errored on the remaining input
           if let Some(err) = err {
             // There are remaining parsers, and all errored on the remaining input
-            input.reset(&start);
-            return Err(ErrMode::Backtrack(err.append(input, &start, ErrorKind::Alt)));
+            input.reset(start.clone());
+            return Err(ErrMode::Backtrack(err.append(input, ErrorKind::Alt)));
           }
 
           // All parsers were applied
@@ -315,7 +284,7 @@ macro_rules! permutation_trait_impl(
 macro_rules! permutation_trait_inner(
   ($it:tt, $self:expr, $input:ident, $start:ident, $res:expr, $err:expr, $head:ident $($id:ident)*) => (
     if $res.$it.is_none() {
-      $input.reset(&$start);
+      $input.reset($start.clone());
       match $self.$it.parse_next($input) {
         Ok(o) => {
           $res.$it = Some(o);

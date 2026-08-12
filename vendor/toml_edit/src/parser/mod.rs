@@ -1,10 +1,9 @@
 #![allow(clippy::type_complexity)]
 
-use std::cell::RefCell;
 pub(crate) mod array;
 pub(crate) mod datetime;
 pub(crate) mod document;
-pub(crate) mod error;
+pub(crate) mod errors;
 pub(crate) mod inline_table;
 pub(crate) mod key;
 pub(crate) mod numbers;
@@ -14,21 +13,17 @@ pub(crate) mod table;
 pub(crate) mod trivia;
 pub(crate) mod value;
 
-pub(crate) use crate::error::TomlError;
+pub use errors::TomlError;
 
-pub(crate) fn parse_document<S: AsRef<str>>(raw: S) -> Result<crate::ImDocument<S>, TomlError> {
+pub(crate) fn parse_document(raw: &str) -> Result<crate::Document, TomlError> {
     use prelude::*;
 
-    let b = new_input(raw.as_ref());
-    let state = RefCell::new(state::ParseState::new());
-    let state_ref = &state;
-    document::document(state_ref)
-        .parse(b.clone())
+    let b = new_input(raw);
+    let mut doc = document::document
+        .parse(b)
         .map_err(|e| TomlError::new(e, b))?;
-    let doc = state
-        .into_inner()
-        .into_document(raw)
-        .map_err(|e| TomlError::custom(e.to_string(), None))?;
+    doc.span = Some(0..(raw.len()));
+    doc.original = Some(raw.to_owned());
     Ok(doc)
 }
 
@@ -36,7 +31,7 @@ pub(crate) fn parse_key(raw: &str) -> Result<crate::Key, TomlError> {
     use prelude::*;
 
     let b = new_input(raw);
-    let result = key::simple_key.parse(b.clone());
+    let result = key::simple_key.parse(b);
     match result {
         Ok((raw, key)) => {
             Ok(crate::Key::new(key).with_repr_unchecked(crate::Repr::new_unchecked(raw)))
@@ -49,7 +44,7 @@ pub(crate) fn parse_key_path(raw: &str) -> Result<Vec<crate::Key>, TomlError> {
     use prelude::*;
 
     let b = new_input(raw);
-    let result = key::key.parse(b.clone());
+    let result = key::key.parse(b);
     match result {
         Ok(mut keys) => {
             for key in &mut keys {
@@ -65,7 +60,7 @@ pub(crate) fn parse_value(raw: &str) -> Result<crate::Value, TomlError> {
     use prelude::*;
 
     let b = new_input(raw);
-    let parsed = value::value.parse(b.clone());
+    let parsed = value::value(RecursionCheck::default()).parse(b);
     match parsed {
         Ok(mut value) => {
             // Only take the repr and not decor, as its probably not intended
@@ -86,79 +81,67 @@ pub(crate) mod prelude {
     pub(crate) use winnow::PResult;
     pub(crate) use winnow::Parser;
 
-    pub(crate) type Input<'b> = winnow::Stateful<winnow::Located<&'b winnow::BStr>, RecursionCheck>;
+    pub(crate) type Input<'b> = winnow::Located<&'b winnow::BStr>;
 
     pub(crate) fn new_input(s: &str) -> Input<'_> {
-        winnow::Stateful {
-            input: winnow::Located::new(winnow::BStr::new(s)),
-            state: Default::default(),
-        }
+        winnow::Located::new(winnow::BStr::new(s))
     }
 
-    #[derive(Clone, Debug, Default, PartialEq, Eq)]
+    #[cfg(not(feature = "unbounded"))]
+    #[derive(Copy, Clone, Debug, Default)]
     pub(crate) struct RecursionCheck {
-        #[cfg(not(feature = "unbounded"))]
         current: usize,
     }
 
     #[cfg(not(feature = "unbounded"))]
-    const LIMIT: usize = 80;
-
     impl RecursionCheck {
-        pub(crate) fn check_depth(_depth: usize) -> Result<(), super::error::CustomError> {
-            #[cfg(not(feature = "unbounded"))]
-            if LIMIT <= _depth {
-                return Err(super::error::CustomError::RecursionLimitExceeded);
+        pub(crate) fn check_depth(depth: usize) -> Result<(), super::errors::CustomError> {
+            if depth < 128 {
+                Ok(())
+            } else {
+                Err(super::errors::CustomError::RecursionLimitExceeded)
             }
-
-            Ok(())
         }
 
-        fn enter(&mut self) -> Result<(), super::error::CustomError> {
-            #[cfg(not(feature = "unbounded"))]
-            {
-                self.current += 1;
-                if LIMIT <= self.current {
-                    return Err(super::error::CustomError::RecursionLimitExceeded);
-                }
-            }
-            Ok(())
-        }
-
-        fn exit(&mut self) {
-            #[cfg(not(feature = "unbounded"))]
-            {
-                self.current -= 1;
+        pub(crate) fn recursing(
+            mut self,
+            input: &mut Input<'_>,
+        ) -> Result<Self, winnow::error::ErrMode<ContextError>> {
+            self.current += 1;
+            if self.current < 128 {
+                Ok(self)
+            } else {
+                Err(winnow::error::ErrMode::from_external_error(
+                    input,
+                    winnow::error::ErrorKind::Eof,
+                    super::errors::CustomError::RecursionLimitExceeded,
+                ))
             }
         }
     }
 
-    pub(crate) fn check_recursion<'b, O>(
-        mut parser: impl Parser<Input<'b>, O, ContextError>,
-    ) -> impl Parser<Input<'b>, O, ContextError> {
-        move |input: &mut Input<'b>| {
-            input.state.enter().map_err(|err| {
-                winnow::error::ErrMode::from_external_error(
-                    input,
-                    winnow::error::ErrorKind::Eof,
-                    err,
-                )
-                .cut()
-            })?;
-            let result = parser.parse_next(input);
-            input.state.exit();
-            result
+    #[cfg(feature = "unbounded")]
+    #[derive(Copy, Clone, Debug, Default)]
+    pub(crate) struct RecursionCheck {}
+
+    #[cfg(feature = "unbounded")]
+    impl RecursionCheck {
+        pub(crate) fn check_depth(_depth: usize) -> Result<(), super::errors::CustomError> {
+            Ok(())
+        }
+
+        pub(crate) fn recursing(
+            self,
+            _input: &mut Input<'_>,
+        ) -> Result<Self, winnow::error::ErrMode<ContextError>> {
+            Ok(self)
         }
     }
 }
 
 #[cfg(test)]
-#[cfg(feature = "parse")]
-#[cfg(feature = "display")]
 mod test {
     use super::*;
-    use snapbox::assert_data_eq;
-    use snapbox::prelude::*;
 
     #[test]
     fn documents() {
@@ -222,7 +205,10 @@ key = "value"
         ];
         for input in documents {
             dbg!(input);
-            let parsed = parse_document(input).map(|d| d.into_mut());
+            let mut parsed = parse_document(input);
+            if let Ok(parsed) = &mut parsed {
+                parsed.despan();
+            }
             let doc = match parsed {
                 Ok(doc) => doc,
                 Err(err) => {
@@ -233,7 +219,7 @@ key = "value"
                 }
             };
 
-            assert_data_eq!(doc.to_string(), input.raw());
+            snapbox::assert_eq(input, doc.to_string());
         }
     }
 
@@ -247,7 +233,10 @@ authors = []
 "];
         for input in parse_only {
             dbg!(input);
-            let parsed = parse_document(input).map(|d| d.into_mut());
+            let mut parsed = parse_document(input);
+            if let Ok(parsed) = &mut parsed {
+                parsed.despan();
+            }
             match parsed {
                 Ok(_) => (),
                 Err(err) => {
@@ -266,7 +255,10 @@ authors = []
 $"#];
         for input in invalid_inputs {
             dbg!(input);
-            let parsed = parse_document(input).map(|d| d.into_mut());
+            let mut parsed = parse_document(input);
+            if let Ok(parsed) = &mut parsed {
+                parsed.despan();
+            }
             assert!(parsed.is_err(), "Input: {:?}", input);
         }
     }

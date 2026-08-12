@@ -13,7 +13,7 @@ env:
   RUST_BACKTRACE: "1"
 
 jobs:
-  library_tests:
+  cargo_tests:
     name: ${{ matrix.target.name }} ${{ matrix.channel }}
     runs-on: ${{ matrix.target.os }}
     strategy:
@@ -34,7 +34,7 @@ jobs:
           # https://github.com/rust-lang/libs-team/issues/72.
           # This test target is here so that we notice if we accidentally bump
           # the MSRV, but it's not a promise that we won't bump it.
-          "1.66.1",
+          "1.60.0",
         ]
 
     steps:
@@ -52,17 +52,13 @@ jobs:
     - name: print instruction set support
       run: cargo run --quiet
       working-directory: ./tools/instruction_set_support
-    # Default tests plus Rayon and trait implementations.
-    - run: cargo test --features=rayon,traits-preview,serde,zeroize
+    # Default tests plus Rayon and RustCrypto trait implementations.
+    - run: cargo test --features=rayon,traits-preview
     # Same but with only one thread in the Rayon pool. This can find deadlocks.
     - name: "again with RAYON_NUM_THREADS=1"
-      run: cargo test --features=rayon,traits-preview,serde,zeroize
+      run: cargo test --features=rayon,traits-preview
       env:
         RAYON_NUM_THREADS: 1
-    # The mmap feature by itself (update_mmap_rayon is omitted).
-    - run: cargo test --features=mmap
-    # All public features put together.
-    - run: cargo test --features=mmap,rayon,traits-preview,serde,zeroize
     # no_std tests.
     - run: cargo test --no-default-features
 
@@ -121,6 +117,13 @@ jobs:
     - name: test vectors pure
       run: cargo test --features=pure
       working-directory: ./test_vectors
+    # Test b3sum.
+    - name: test b3sum
+      run: cargo test
+      working-directory: ./b3sum
+    - name: test b3sum --no-default-features
+      run: cargo test --no-default-features
+      working-directory: ./b3sum
     # Test C code.
     - name: cargo test C bindings assembly
       run: cargo test
@@ -133,43 +136,6 @@ jobs:
       run: cargo test
       working-directory: ./reference_impl
 
-  b3sum_tests:
-    name: b3sum ${{ matrix.target.name }} ${{ matrix.channel }}
-    runs-on: ${{ matrix.target.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [
-          { "os": "ubuntu-latest",  "toolchain": "x86_64-unknown-linux-gnu", "name": "Linux GNU" },
-          { "os": "macOS-latest",   "toolchain": "x86_64-apple-darwin",      "name": "macOS" },
-          { "os": "windows-latest", "toolchain": "x86_64-pc-windows-msvc",   "name": "Windows MSVC" },
-          { "os": "windows-latest", "toolchain": "x86_64-pc-windows-gnu",    "name": "Windows GNU" }
-        ]
-        channel: [
-          "stable",
-          "beta",
-          "nightly",
-          # The b3sum MSRV is sometimes higher than the blake3 crate's, because
-          # b3sum depends on Clap. We check in the b3sum Cargo.lock, so Clap
-          # update shouldn't randomly break us here.
-          "1.70.0",
-        ]
-
-    steps:
-    - uses: actions/checkout@v3
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ format('{0}-{1}', matrix.channel, matrix.target.toolchain) }}
-        profile: minimal
-        override: true
-    # Test b3sum.
-    - name: test b3sum
-      run: cargo test
-      working-directory: ./b3sum
-    - name: test b3sum --no-default-features
-      run: cargo test --no-default-features
-      working-directory: ./b3sum
-
   cross_tests:
     name: cross ${{ matrix.arch }}
     runs-on: ubuntu-latest
@@ -181,9 +147,7 @@ jobs:
           - i686-unknown-linux-musl
           - armv7-unknown-linux-gnueabihf
           - aarch64-unknown-linux-gnu
-          # Big-endian targets. See https://twitter.com/burntsushi5/status/1695483429997945092.
-          - powerpc64-unknown-linux-gnu
-          - s390x-unknown-linux-gnu
+          - mips-unknown-linux-gnu
 
     steps:
     - uses: actions/checkout@v3
@@ -311,26 +275,3 @@ jobs:
           curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal
           cd /work
           ~/.cargo/bin/cargo test --features prefer_intrinsics
-
-  # CMake build test (Library only), current macOS/Linux only.
-  cmake_build:
-    name: CMake ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ["ubuntu-latest", "macOS-latest", "windows-latest"]
-        compiler: [gcc, clang, cl]
-        exclude:
-          - os: windows-latest
-            compiler: gcc
-          - os: ubuntu-latest
-            compiler: msvc
-          - os: macOS-latest
-            compiler: msvc
-    steps:
-      - uses: actions/checkout@v3
-      - name: CMake generation
-        run: cmake -S c -B c/build -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/target
-      - name: CMake build / install
-        run: cmake --build c/build --target install

@@ -1,6 +1,6 @@
 //! Taken from https://github.com/bbqsrc/bare-io (with adjustments)
 
-use crate::__private::maybestd::string::String;
+use crate::maybestd::string::String;
 use core::{convert::From, fmt, result};
 
 /// A specialized [`Result`] type for I/O operations.
@@ -151,10 +151,6 @@ pub enum ErrorKind {
     /// particular number of bytes but only a smaller number of bytes could be
     /// read.
     UnexpectedEof,
-
-    /// An operation could not be completed, because it failed
-    /// to allocate enough memory.
-    OutOfMemory,
 }
 
 impl ErrorKind {
@@ -178,7 +174,6 @@ impl ErrorKind {
             ErrorKind::Interrupted => "operation interrupted",
             ErrorKind::Other => "other os error",
             ErrorKind::UnexpectedEof => "unexpected end of file",
-            ErrorKind::OutOfMemory => "out of memory",
         }
     }
 }
@@ -215,10 +210,6 @@ impl Error {
     /// originate from the OS itself. The `error` argument is an arbitrary
     /// payload which will be contained in this [`Error`].
     ///
-    /// Note that this function allocates memory on the heap.
-    /// If no extra payload is required, use the `From` conversion from
-    /// `ErrorKind`.
-    ///
     /// # Examples
     ///
     /// ```
@@ -229,40 +220,9 @@ impl Error {
     ///
     /// // errors can also be created from other errors
     /// let custom_error2 = Error::new(ErrorKind::Interrupted, custom_error);
-    ///
-    /// // creating an error without payload (and without memory allocation)
-    /// let eof_error = Error::from(ErrorKind::UnexpectedEof);
     /// ```
-    #[inline(never)]
-    pub fn new<E>(kind: ErrorKind, error: E) -> Error
-    where
-        E: Into<String>,
-    {
+    pub fn new<T: Into<String>>(kind: ErrorKind, error: T) -> Error {
         Self::_new(kind, error.into())
-    }
-
-    /// Creates a new I/O error from an arbitrary error payload.
-    ///
-    /// This function is used to generically create I/O errors which do not
-    /// originate from the OS itself. It is a shortcut for [`Error::new`]
-    /// with [`ErrorKind::Other`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::io::Error;
-    ///
-    /// // errors can be created from strings
-    /// let custom_error = Error::other("oh no!");
-    ///
-    /// // errors can also be created from other errors
-    /// let custom_error2 = Error::other(custom_error);
-    /// ```
-    pub fn other<E>(error: E) -> Error
-    where
-        E: Into<String>,
-    {
-        Self::_new(ErrorKind::Other, error.into())
     }
 
     fn _new(kind: ErrorKind, error: String) -> Error {
@@ -298,8 +258,6 @@ impl Error {
     ///     print_error(&Error::new(ErrorKind::Other, "oh no!"));
     /// }
     /// ```
-    #[must_use]
-    #[inline]
     pub fn get_ref(&self) -> Option<&str> {
         match self.repr {
             Repr::Simple(..) => None,
@@ -334,8 +292,6 @@ impl Error {
     ///     print_error(Error::new(ErrorKind::Other, "oh no!"));
     /// }
     /// ```
-    #[must_use = "`self` will be dropped if the result is not used"]
-    #[inline]
     pub fn into_inner(self) -> Option<String> {
         match self.repr {
             Repr::Simple(..) => None,
@@ -361,8 +317,6 @@ impl Error {
     ///     print_error(Error::new(ErrorKind::AddrInUse, "oh no!"));
     /// }
     /// ```
-    #[must_use]
-    #[inline]
     pub fn kind(&self) -> ErrorKind {
         match self.repr {
             Repr::Custom(ref c) => c.kind,

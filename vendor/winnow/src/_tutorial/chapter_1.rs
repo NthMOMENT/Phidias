@@ -1,25 +1,26 @@
 //! # Chapter 1: The Winnow Way
 //!
 //! First of all, we need to understand the way that winnow thinks about parsing.
-//! As discussed in the introduction, winnow lets us compose more complex parsers from more simple
-//! ones (using "combinators").
+//! As discussed in the introduction, winnow lets us build simple parsers, and
+//! then combine them (using "combinators").
 //!
-//! Let's discuss what a "parser" actually does. A parser takes an input and advances it until it returns
+//! Let's discuss what a "parser" actually does. A parser takes an input and returns
 //! a result, where:
 //!  - `Ok` indicates the parser successfully found what it was looking for; or
 //!  - `Err` indicates the parser could not find what it was looking for.
 //!
 //! Parsers do more than just return a binary "success"/"failure" code.
-//! - On success, the parser will return the processed data. The input will be advanced to the end of
-//!   what was processed, pointing to what will be parsed next.
-//! - If the parser failed, then there are multiple errors that could be returned.
-//!   We'll explore this further in [`chapter_7`].
+//! On success, the parser will return the processed data. The input will be left pointing to
+//! data that still needs processing
+//!
+//! If the parser failed, then there are multiple errors that could be returned.
+//! For simplicity, however, in the next chapters we will leave these unexplored.
 //!
 //! ```text
-//!                                  ┌─► Ok(what matched the parser)
-//!             ┌────────┐           │
-//! my input───►│a parser├──►either──┤
-//!             └────────┘           └─► Err(...)
+//!                                   ┌─► Ok(what matched the parser)
+//!             ┌─────────┐           │
+//! my input───►│my parser├──►either──┤
+//!             └─────────┘           └─► Err(...)
 //! ```
 //!
 //!
@@ -36,13 +37,12 @@
 //! To combine parsers, we need a common way to refer to them which is where the [`Parser<I, O, E>`]
 //! trait comes in with [`Parser::parse_next`] being the primary way to drive
 //! parsing forward.
-//! In [`chapter_6`], we'll cover how to integrate these into your application, particularly with
-//! [`Parser::parse`].
 //!
 //! You'll note that `I` and `O` are parameterized -- while most of the examples in this book
 //! will be with `&str` (i.e. parsing a string); they do not have to be strings; nor do they
 //! have to be the same type (consider the simple example where `I = &str`, and `O = u64` -- this
 //! parses a string into an unsigned integer.)
+//!
 //!
 //! # Let's write our first parser!
 //!
@@ -54,7 +54,7 @@
 //! This parser function should take in a `&str`:
 //!
 //!  - Since it is supposed to succeed, we know it will return the `Ok` variant.
-//!  - Since it does nothing to our input, the input will be left where it started.
+//!  - Since it does nothing to our input, the remaining input is the same as the input.
 //!  - Since it doesn't parse anything, it also should just return an empty string.
 //!
 //! ```rust
@@ -78,8 +78,6 @@
 //! ```
 
 #![allow(unused_imports)]
-use super::chapter_6;
-use super::chapter_7;
 use crate::PResult;
 use crate::Parser;
 

@@ -15,8 +15,9 @@ use crate::error::Needed;
 use crate::error::ParserError;
 use crate::lib::std::ops::{Add, Shl};
 use crate::stream::Accumulate;
-use crate::stream::{Stream, StreamIsPartial};
+use crate::stream::{AsBytes, Stream, StreamIsPartial};
 use crate::stream::{ToUsize, UpdateSlice};
+use crate::token::take;
 use crate::PResult;
 use crate::Parser;
 
@@ -35,7 +36,7 @@ pub enum Endianness {
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -67,10 +68,10 @@ pub enum Endianness {
 /// assert_eq!(parser(Partial::new(&b""[..])), Err(ErrMode::Incomplete(Needed::new(1))));
 /// ```
 #[inline(always)]
-pub fn be_u8<Input, Error>(input: &mut Input) -> PResult<u8, Error>
+pub fn be_u8<I, E: ParserError<I>>(input: &mut I) -> PResult<u8, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
 {
     u8(input)
 }
@@ -79,7 +80,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -111,19 +112,20 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(1))));
 /// ```
 #[inline(always)]
-pub fn be_u16<Input, Error>(input: &mut Input) -> PResult<u16, Error>
+pub fn be_u16<I, E: ParserError<I>>(input: &mut I) -> PResult<u16, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_u16", move |input: &mut Input| be_uint(input, 2)).parse_next(input)
+    trace("be_u16", move |input: &mut I| be_uint(input, 2)).parse_next(input)
 }
 
 /// Recognizes a big endian unsigned 3 byte integer.
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -155,19 +157,20 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(2))));
 /// ```
 #[inline(always)]
-pub fn be_u24<Input, Error>(input: &mut Input) -> PResult<u32, Error>
+pub fn be_u24<I, E: ParserError<I>>(input: &mut I) -> PResult<u32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_u23", move |input: &mut Input| be_uint(input, 3)).parse_next(input)
+    trace("be_u23", move |input: &mut I| be_uint(input, 3)).parse_next(input)
 }
 
 /// Recognizes a big endian unsigned 4 bytes integer.
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -199,19 +202,20 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(3))));
 /// ```
 #[inline(always)]
-pub fn be_u32<Input, Error>(input: &mut Input) -> PResult<u32, Error>
+pub fn be_u32<I, E: ParserError<I>>(input: &mut I) -> PResult<u32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_u32", move |input: &mut Input| be_uint(input, 4)).parse_next(input)
+    trace("be_u32", move |input: &mut I| be_uint(input, 4)).parse_next(input)
 }
 
 /// Recognizes a big endian unsigned 8 bytes integer.
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -243,19 +247,20 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(7))));
 /// ```
 #[inline(always)]
-pub fn be_u64<Input, Error>(input: &mut Input) -> PResult<u64, Error>
+pub fn be_u64<I, E: ParserError<I>>(input: &mut I) -> PResult<u64, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_u64", move |input: &mut Input| be_uint(input, 8)).parse_next(input)
+    trace("be_u64", move |input: &mut I| be_uint(input, 8)).parse_next(input)
 }
 
 /// Recognizes a big endian unsigned 16 bytes integer.
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -287,46 +292,36 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(15))));
 /// ```
 #[inline(always)]
-pub fn be_u128<Input, Error>(input: &mut Input) -> PResult<u128, Error>
+pub fn be_u128<I, E: ParserError<I>>(input: &mut I) -> PResult<u128, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_u128", move |input: &mut Input| be_uint(input, 16)).parse_next(input)
+    trace("be_u128", move |input: &mut I| be_uint(input, 16)).parse_next(input)
 }
 
 #[inline]
-fn be_uint<Input, Uint, Error>(input: &mut Input, bound: usize) -> PResult<Uint, Error>
+fn be_uint<I, Uint, E: ParserError<I>>(input: &mut I, bound: usize) -> PResult<Uint, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
     Uint: Default + Shl<u8, Output = Uint> + Add<Uint, Output = Uint> + From<u8>,
-    Error: ParserError<Input>,
 {
     debug_assert_ne!(bound, 1, "to_be_uint needs extra work to avoid overflow");
-    match input.offset_at(bound) {
-        Ok(offset) => {
-            let res = to_be_uint(input, offset);
-            input.next_slice(offset);
-            Ok(res)
-        }
-        Err(e) if <Input as StreamIsPartial>::is_partial_supported() && input.is_partial() => {
-            Err(ErrMode::Incomplete(e))
-        }
-        Err(_needed) => Err(ErrMode::from_error_kind(input, ErrorKind::Slice)),
-    }
+    take(bound)
+        .map(|n: <I as Stream>::Slice| to_be_uint(n.as_bytes()))
+        .parse_next(input)
 }
 
 #[inline]
-fn to_be_uint<Input, Uint>(number: &Input, offset: usize) -> Uint
+fn to_be_uint<Uint>(number: &[u8]) -> Uint
 where
-    Input: Stream,
-    Uint: Default
-        + Shl<u8, Output = Uint>
-        + Add<Uint, Output = Uint>
-        + From<<Input as Stream>::Token>,
+    Uint: Default + Shl<u8, Output = Uint> + Add<Uint, Output = Uint> + From<u8>,
 {
     let mut res = Uint::default();
-    for (_, byte) in number.iter_offsets().take(offset) {
+    for byte in number.iter().copied() {
         res = (res << 8) + byte.into();
     }
 
@@ -337,7 +332,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -369,10 +364,10 @@ where
 /// assert_eq!(parser(Partial::new(&b""[..])), Err(ErrMode::Incomplete(Needed::new(1))));
 /// ```
 #[inline(always)]
-pub fn be_i8<Input, Error>(input: &mut Input) -> PResult<i8, Error>
+pub fn be_i8<I, E: ParserError<I>>(input: &mut I) -> PResult<i8, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
 {
     i8(input)
 }
@@ -381,7 +376,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -413,12 +408,13 @@ where
 /// assert_eq!(parser(Partial::new(&b""[..])), Err(ErrMode::Incomplete(Needed::new(2))));
 /// ```
 #[inline(always)]
-pub fn be_i16<Input, Error>(input: &mut Input) -> PResult<i16, Error>
+pub fn be_i16<I, E: ParserError<I>>(input: &mut I) -> PResult<i16, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_i16", move |input: &mut Input| {
+    trace("be_i16", move |input: &mut I| {
         be_uint::<_, u16, _>(input, 2).map(|n| n as i16)
     })
     .parse_next(input)
@@ -428,7 +424,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -460,12 +456,13 @@ where
 /// assert_eq!(parser(Partial::new(&b""[..])), Err(ErrMode::Incomplete(Needed::new(3))));
 /// ```
 #[inline(always)]
-pub fn be_i24<Input, Error>(input: &mut Input) -> PResult<i32, Error>
+pub fn be_i24<I, E: ParserError<I>>(input: &mut I) -> PResult<i32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_i24", move |input: &mut Input| {
+    trace("be_i24", move |input: &mut I| {
         be_uint::<_, u32, _>(input, 3).map(|n| {
             // Same as the unsigned version but we need to sign-extend manually here
             let n = if n & 0x80_00_00 != 0 {
@@ -483,7 +480,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -515,12 +512,13 @@ where
 /// assert_eq!(parser(Partial::new(&b""[..])), Err(ErrMode::Incomplete(Needed::new(4))));
 /// ```
 #[inline(always)]
-pub fn be_i32<Input, Error>(input: &mut Input) -> PResult<i32, Error>
+pub fn be_i32<I, E: ParserError<I>>(input: &mut I) -> PResult<i32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_i32", move |input: &mut Input| {
+    trace("be_i32", move |input: &mut I| {
         be_uint::<_, u32, _>(input, 4).map(|n| n as i32)
     })
     .parse_next(input)
@@ -530,7 +528,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -562,12 +560,13 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(7))));
 /// ```
 #[inline(always)]
-pub fn be_i64<Input, Error>(input: &mut Input) -> PResult<i64, Error>
+pub fn be_i64<I, E: ParserError<I>>(input: &mut I) -> PResult<i64, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_i64", move |input: &mut Input| {
+    trace("be_i64", move |input: &mut I| {
         be_uint::<_, u64, _>(input, 8).map(|n| n as i64)
     })
     .parse_next(input)
@@ -577,7 +576,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -609,12 +608,13 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(15))));
 /// ```
 #[inline(always)]
-pub fn be_i128<Input, Error>(input: &mut Input) -> PResult<i128, Error>
+pub fn be_i128<I, E: ParserError<I>>(input: &mut I) -> PResult<i128, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_i128", move |input: &mut Input| {
+    trace("be_i128", move |input: &mut I| {
         be_uint::<_, u128, _>(input, 16).map(|n| n as i128)
     })
     .parse_next(input)
@@ -624,7 +624,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -656,10 +656,10 @@ where
 /// assert_eq!(parser(Partial::new(&b""[..])), Err(ErrMode::Incomplete(Needed::new(1))));
 /// ```
 #[inline(always)]
-pub fn le_u8<Input, Error>(input: &mut Input) -> PResult<u8, Error>
+pub fn le_u8<I, E: ParserError<I>>(input: &mut I) -> PResult<u8, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
 {
     u8(input)
 }
@@ -668,7 +668,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -700,19 +700,20 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(1))));
 /// ```
 #[inline(always)]
-pub fn le_u16<Input, Error>(input: &mut Input) -> PResult<u16, Error>
+pub fn le_u16<I, E: ParserError<I>>(input: &mut I) -> PResult<u16, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("le_u16", move |input: &mut Input| le_uint(input, 2)).parse_next(input)
+    trace("le_u16", move |input: &mut I| le_uint(input, 2)).parse_next(input)
 }
 
 /// Recognizes a little endian unsigned 3 byte integer.
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -744,19 +745,20 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(2))));
 /// ```
 #[inline(always)]
-pub fn le_u24<Input, Error>(input: &mut Input) -> PResult<u32, Error>
+pub fn le_u24<I, E: ParserError<I>>(input: &mut I) -> PResult<u32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("le_u24", move |input: &mut Input| le_uint(input, 3)).parse_next(input)
+    trace("le_u24", move |input: &mut I| le_uint(input, 3)).parse_next(input)
 }
 
 /// Recognizes a little endian unsigned 4 bytes integer.
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -788,19 +790,20 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(3))));
 /// ```
 #[inline(always)]
-pub fn le_u32<Input, Error>(input: &mut Input) -> PResult<u32, Error>
+pub fn le_u32<I, E: ParserError<I>>(input: &mut I) -> PResult<u32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("le_u32", move |input: &mut Input| le_uint(input, 4)).parse_next(input)
+    trace("le_u32", move |input: &mut I| le_uint(input, 4)).parse_next(input)
 }
 
 /// Recognizes a little endian unsigned 8 bytes integer.
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -832,19 +835,20 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(7))));
 /// ```
 #[inline(always)]
-pub fn le_u64<Input, Error>(input: &mut Input) -> PResult<u64, Error>
+pub fn le_u64<I, E: ParserError<I>>(input: &mut I) -> PResult<u64, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("le_u64", move |input: &mut Input| le_uint(input, 8)).parse_next(input)
+    trace("le_u64", move |input: &mut I| le_uint(input, 8)).parse_next(input)
 }
 
 /// Recognizes a little endian unsigned 16 bytes integer.
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -876,45 +880,35 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(15))));
 /// ```
 #[inline(always)]
-pub fn le_u128<Input, Error>(input: &mut Input) -> PResult<u128, Error>
+pub fn le_u128<I, E: ParserError<I>>(input: &mut I) -> PResult<u128, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("le_u128", move |input: &mut Input| le_uint(input, 16)).parse_next(input)
+    trace("le_u128", move |input: &mut I| le_uint(input, 16)).parse_next(input)
 }
 
 #[inline]
-fn le_uint<Input, Uint, Error>(input: &mut Input, bound: usize) -> PResult<Uint, Error>
+fn le_uint<I, Uint, E: ParserError<I>>(input: &mut I, bound: usize) -> PResult<Uint, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
     Uint: Default + Shl<u8, Output = Uint> + Add<Uint, Output = Uint> + From<u8>,
-    Error: ParserError<Input>,
 {
-    match input.offset_at(bound) {
-        Ok(offset) => {
-            let res = to_le_uint(input, offset);
-            input.next_slice(offset);
-            Ok(res)
-        }
-        Err(e) if <Input as StreamIsPartial>::is_partial_supported() && input.is_partial() => {
-            Err(ErrMode::Incomplete(e))
-        }
-        Err(_needed) => Err(ErrMode::from_error_kind(input, ErrorKind::Slice)),
-    }
+    take(bound)
+        .map(|n: <I as Stream>::Slice| to_le_uint(n.as_bytes()))
+        .parse_next(input)
 }
 
 #[inline]
-fn to_le_uint<Input, Uint>(number: &Input, offset: usize) -> Uint
+fn to_le_uint<Uint>(number: &[u8]) -> Uint
 where
-    Input: Stream,
-    Uint: Default
-        + Shl<u8, Output = Uint>
-        + Add<Uint, Output = Uint>
-        + From<<Input as Stream>::Token>,
+    Uint: Default + Shl<u8, Output = Uint> + Add<Uint, Output = Uint> + From<u8>,
 {
     let mut res = Uint::default();
-    for (index, byte) in number.iter_offsets().take(offset) {
+    for (index, byte) in number.iter_offsets() {
         res = res + (Uint::from(byte) << (8 * index as u8));
     }
 
@@ -925,7 +919,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -957,10 +951,10 @@ where
 /// assert_eq!(parser(Partial::new(&b""[..])), Err(ErrMode::Incomplete(Needed::new(1))));
 /// ```
 #[inline(always)]
-pub fn le_i8<Input, Error>(input: &mut Input) -> PResult<i8, Error>
+pub fn le_i8<I, E: ParserError<I>>(input: &mut I) -> PResult<i8, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
 {
     i8(input)
 }
@@ -969,7 +963,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1001,12 +995,13 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(1))));
 /// ```
 #[inline(always)]
-pub fn le_i16<Input, Error>(input: &mut Input) -> PResult<i16, Error>
+pub fn le_i16<I, E: ParserError<I>>(input: &mut I) -> PResult<i16, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("le_i16", move |input: &mut Input| {
+    trace("le_i16", move |input: &mut I| {
         le_uint::<_, u16, _>(input, 2).map(|n| n as i16)
     })
     .parse_next(input)
@@ -1016,7 +1011,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1048,12 +1043,13 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(2))));
 /// ```
 #[inline(always)]
-pub fn le_i24<Input, Error>(input: &mut Input) -> PResult<i32, Error>
+pub fn le_i24<I, E: ParserError<I>>(input: &mut I) -> PResult<i32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("le_i24", move |input: &mut Input| {
+    trace("le_i24", move |input: &mut I| {
         le_uint::<_, u32, _>(input, 3).map(|n| {
             // Same as the unsigned version but we need to sign-extend manually here
             let n = if n & 0x80_00_00 != 0 {
@@ -1071,7 +1067,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1103,12 +1099,13 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(3))));
 /// ```
 #[inline(always)]
-pub fn le_i32<Input, Error>(input: &mut Input) -> PResult<i32, Error>
+pub fn le_i32<I, E: ParserError<I>>(input: &mut I) -> PResult<i32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("le_i32", move |input: &mut Input| {
+    trace("le_i32", move |input: &mut I| {
         le_uint::<_, u32, _>(input, 4).map(|n| n as i32)
     })
     .parse_next(input)
@@ -1118,7 +1115,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1150,12 +1147,13 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(7))));
 /// ```
 #[inline(always)]
-pub fn le_i64<Input, Error>(input: &mut Input) -> PResult<i64, Error>
+pub fn le_i64<I, E: ParserError<I>>(input: &mut I) -> PResult<i64, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("le_i64", move |input: &mut Input| {
+    trace("le_i64", move |input: &mut I| {
         le_uint::<_, u64, _>(input, 8).map(|n| n as i64)
     })
     .parse_next(input)
@@ -1165,7 +1163,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1197,12 +1195,13 @@ where
 /// assert_eq!(parser(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(15))));
 /// ```
 #[inline(always)]
-pub fn le_i128<Input, Error>(input: &mut Input) -> PResult<i128, Error>
+pub fn le_i128<I, E: ParserError<I>>(input: &mut I) -> PResult<i128, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("le_i128", move |input: &mut Input| {
+    trace("le_i128", move |input: &mut I| {
         le_uint::<_, u128, _>(input, 16).map(|n| n as i128)
     })
     .parse_next(input)
@@ -1210,15 +1209,11 @@ where
 
 /// Recognizes an unsigned 1 byte integer
 ///
-/// <div class="warning">
-///
 /// **Note:** that endianness does not apply to 1 byte numbers.
-///
-/// </div>
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1251,13 +1246,13 @@ where
 /// assert_eq!(parser(Partial::new(&b""[..])), Err(ErrMode::Incomplete(Needed::new(1))));
 /// ```
 #[inline(always)]
-pub fn u8<Input, Error>(input: &mut Input) -> PResult<u8, Error>
+pub fn u8<I, E: ParserError<I>>(input: &mut I) -> PResult<u8, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
 {
-    trace("u8", move |input: &mut Input| {
-        if <Input as StreamIsPartial>::is_partial_supported() {
+    trace("u8", move |input: &mut I| {
+        if <I as StreamIsPartial>::is_partial_supported() {
             u8_::<_, _, true>(input)
         } else {
             u8_::<_, _, false>(input)
@@ -1266,16 +1261,16 @@ where
     .parse_next(input)
 }
 
-fn u8_<Input, Error, const PARTIAL: bool>(input: &mut Input) -> PResult<u8, Error>
+fn u8_<I, E: ParserError<I>, const PARTIAL: bool>(input: &mut I) -> PResult<u8, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
 {
     input.next_token().ok_or_else(|| {
         if PARTIAL && input.is_partial() {
             ErrMode::Incomplete(Needed::new(1))
         } else {
-            ErrMode::Backtrack(Error::from_error_kind(input, ErrorKind::Token))
+            ErrMode::Backtrack(E::from_error_kind(input, ErrorKind::Token))
         }
     })
 }
@@ -1287,7 +1282,7 @@ where
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1334,12 +1329,13 @@ where
 /// assert_eq!(le_u16(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(1))));
 /// ```
 #[inline(always)]
-pub fn u16<Input, Error>(endian: Endianness) -> impl Parser<Input, u16, Error>
+pub fn u16<I, E: ParserError<I>>(endian: Endianness) -> impl Parser<I, u16, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    move |input: &mut Input| {
+    move |input: &mut I| {
         match endian {
             Endianness::Big => be_u16,
             Endianness::Little => le_u16,
@@ -1358,7 +1354,7 @@ where
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1405,12 +1401,13 @@ where
 /// assert_eq!(le_u24(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(2))));
 /// ```
 #[inline(always)]
-pub fn u24<Input, Error>(endian: Endianness) -> impl Parser<Input, u32, Error>
+pub fn u24<I, E: ParserError<I>>(endian: Endianness) -> impl Parser<I, u32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    move |input: &mut Input| {
+    move |input: &mut I| {
         match endian {
             Endianness::Big => be_u24,
             Endianness::Little => le_u24,
@@ -1429,7 +1426,7 @@ where
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1476,12 +1473,13 @@ where
 /// assert_eq!(le_u32(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(3))));
 /// ```
 #[inline(always)]
-pub fn u32<Input, Error>(endian: Endianness) -> impl Parser<Input, u32, Error>
+pub fn u32<I, E: ParserError<I>>(endian: Endianness) -> impl Parser<I, u32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    move |input: &mut Input| {
+    move |input: &mut I| {
         match endian {
             Endianness::Big => be_u32,
             Endianness::Little => le_u32,
@@ -1500,7 +1498,7 @@ where
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1547,12 +1545,13 @@ where
 /// assert_eq!(le_u64(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(7))));
 /// ```
 #[inline(always)]
-pub fn u64<Input, Error>(endian: Endianness) -> impl Parser<Input, u64, Error>
+pub fn u64<I, E: ParserError<I>>(endian: Endianness) -> impl Parser<I, u64, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    move |input: &mut Input| {
+    move |input: &mut I| {
         match endian {
             Endianness::Big => be_u64,
             Endianness::Little => le_u64,
@@ -1571,7 +1570,7 @@ where
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1618,12 +1617,13 @@ where
 /// assert_eq!(le_u128(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(15))));
 /// ```
 #[inline(always)]
-pub fn u128<Input, Error>(endian: Endianness) -> impl Parser<Input, u128, Error>
+pub fn u128<I, E: ParserError<I>>(endian: Endianness) -> impl Parser<I, u128, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    move |input: &mut Input| {
+    move |input: &mut I| {
         match endian {
             Endianness::Big => be_u128,
             Endianness::Little => le_u128,
@@ -1637,15 +1637,11 @@ where
 
 /// Recognizes a signed 1 byte integer
 ///
-/// <div class="warning">
-///
 /// **Note:** that endianness does not apply to 1 byte numbers.
-///
-/// </div>
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1678,13 +1674,13 @@ where
 /// assert_eq!(parser(Partial::new(&b""[..])), Err(ErrMode::Incomplete(Needed::new(1))));
 /// ```
 #[inline(always)]
-pub fn i8<Input, Error>(input: &mut Input) -> PResult<i8, Error>
+pub fn i8<I, E: ParserError<I>>(input: &mut I) -> PResult<i8, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
 {
-    trace("i8", move |input: &mut Input| {
-        if <Input as StreamIsPartial>::is_partial_supported() {
+    trace("i8", move |input: &mut I| {
+        if <I as StreamIsPartial>::is_partial_supported() {
             u8_::<_, _, true>(input)
         } else {
             u8_::<_, _, false>(input)
@@ -1701,7 +1697,7 @@ where
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1748,12 +1744,13 @@ where
 /// assert_eq!(le_i16(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(1))));
 /// ```
 #[inline(always)]
-pub fn i16<Input, Error>(endian: Endianness) -> impl Parser<Input, i16, Error>
+pub fn i16<I, E: ParserError<I>>(endian: Endianness) -> impl Parser<I, i16, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    move |input: &mut Input| {
+    move |input: &mut I| {
         match endian {
             Endianness::Big => be_i16,
             Endianness::Little => le_i16,
@@ -1772,7 +1769,7 @@ where
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1819,12 +1816,13 @@ where
 /// assert_eq!(le_i24(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(2))));
 /// ```
 #[inline(always)]
-pub fn i24<Input, Error>(endian: Endianness) -> impl Parser<Input, i32, Error>
+pub fn i24<I, E: ParserError<I>>(endian: Endianness) -> impl Parser<I, i32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    move |input: &mut Input| {
+    move |input: &mut I| {
         match endian {
             Endianness::Big => be_i24,
             Endianness::Little => le_i24,
@@ -1843,7 +1841,7 @@ where
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1890,12 +1888,13 @@ where
 /// assert_eq!(le_i32(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(3))));
 /// ```
 #[inline(always)]
-pub fn i32<Input, Error>(endian: Endianness) -> impl Parser<Input, i32, Error>
+pub fn i32<I, E: ParserError<I>>(endian: Endianness) -> impl Parser<I, i32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    move |input: &mut Input| {
+    move |input: &mut I| {
         match endian {
             Endianness::Big => be_i32,
             Endianness::Little => le_i32,
@@ -1914,7 +1913,7 @@ where
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -1961,12 +1960,13 @@ where
 /// assert_eq!(le_i64(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(7))));
 /// ```
 #[inline(always)]
-pub fn i64<Input, Error>(endian: Endianness) -> impl Parser<Input, i64, Error>
+pub fn i64<I, E: ParserError<I>>(endian: Endianness) -> impl Parser<I, i64, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    move |input: &mut Input| {
+    move |input: &mut I| {
         match endian {
             Endianness::Big => be_i64,
             Endianness::Little => le_i64,
@@ -1985,7 +1985,7 @@ where
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -2032,12 +2032,13 @@ where
 /// assert_eq!(le_i128(Partial::new(&b"\x01"[..])), Err(ErrMode::Incomplete(Needed::new(15))));
 /// ```
 #[inline(always)]
-pub fn i128<Input, Error>(endian: Endianness) -> impl Parser<Input, i128, Error>
+pub fn i128<I, E: ParserError<I>>(endian: Endianness) -> impl Parser<I, i128, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    move |input: &mut Input| {
+    move |input: &mut I| {
         match endian {
             Endianness::Big => be_i128,
             Endianness::Little => le_i128,
@@ -2053,7 +2054,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -2086,12 +2087,13 @@ where
 /// assert_eq!(parser(Partial::new(&[0x01][..])), Err(ErrMode::Incomplete(Needed::new(3))));
 /// ```
 #[inline(always)]
-pub fn be_f32<Input, Error>(input: &mut Input) -> PResult<f32, Error>
+pub fn be_f32<I, E: ParserError<I>>(input: &mut I) -> PResult<f32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_f32", move |input: &mut Input| {
+    trace("be_f32", move |input: &mut I| {
         be_uint::<_, u32, _>(input, 4).map(f32::from_bits)
     })
     .parse_next(input)
@@ -2101,7 +2103,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -2133,12 +2135,13 @@ where
 /// assert_eq!(parser(Partial::new(&[0x01][..])), Err(ErrMode::Incomplete(Needed::new(7))));
 /// ```
 #[inline(always)]
-pub fn be_f64<Input, Error>(input: &mut Input) -> PResult<f64, Error>
+pub fn be_f64<I, E: ParserError<I>>(input: &mut I) -> PResult<f64, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_f64", move |input: &mut Input| {
+    trace("be_f64", move |input: &mut I| {
         be_uint::<_, u64, _>(input, 8).map(f64::from_bits)
     })
     .parse_next(input)
@@ -2148,7 +2151,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -2180,12 +2183,13 @@ where
 /// assert_eq!(parser(Partial::new(&[0x01][..])), Err(ErrMode::Incomplete(Needed::new(3))));
 /// ```
 #[inline(always)]
-pub fn le_f32<Input, Error>(input: &mut Input) -> PResult<f32, Error>
+pub fn le_f32<I, E: ParserError<I>>(input: &mut I) -> PResult<f32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("le_f32", move |input: &mut Input| {
+    trace("le_f32", move |input: &mut I| {
         le_uint::<_, u32, _>(input, 4).map(f32::from_bits)
     })
     .parse_next(input)
@@ -2195,7 +2199,7 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -2227,12 +2231,13 @@ where
 /// assert_eq!(parser(Partial::new(&[0x01][..])), Err(ErrMode::Incomplete(Needed::new(7))));
 /// ```
 #[inline(always)]
-pub fn le_f64<Input, Error>(input: &mut Input) -> PResult<f64, Error>
+pub fn le_f64<I, E: ParserError<I>>(input: &mut I) -> PResult<f64, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    trace("be_f64", move |input: &mut Input| {
+    trace("be_f64", move |input: &mut I| {
         le_uint::<_, u64, _>(input, 8).map(f64::from_bits)
     })
     .parse_next(input)
@@ -2245,7 +2250,7 @@ where
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -2292,12 +2297,13 @@ where
 /// assert_eq!(le_f32(Partial::new(&b"abc"[..])), Err(ErrMode::Incomplete(Needed::new(1))));
 /// ```
 #[inline(always)]
-pub fn f32<Input, Error>(endian: Endianness) -> impl Parser<Input, f32, Error>
+pub fn f32<I, E: ParserError<I>>(endian: Endianness) -> impl Parser<I, f32, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    move |input: &mut Input| {
+    move |input: &mut I| {
         match endian {
             Endianness::Big => be_f32,
             Endianness::Little => le_f32,
@@ -2316,7 +2322,7 @@ where
 ///
 /// *Complete version*: returns an error if there is not enough input data
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
 ///
 /// # Example
 ///
@@ -2363,12 +2369,13 @@ where
 /// assert_eq!(le_f64(Partial::new(&b"abc"[..])), Err(ErrMode::Incomplete(Needed::new(5))));
 /// ```
 #[inline(always)]
-pub fn f64<Input, Error>(endian: Endianness) -> impl Parser<Input, f64, Error>
+pub fn f64<I, E: ParserError<I>>(endian: Endianness) -> impl Parser<I, f64, E>
 where
-    Input: StreamIsPartial + Stream<Token = u8>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream<Token = u8>,
+    <I as Stream>::Slice: AsBytes,
 {
-    move |input: &mut Input| {
+    move |input: &mut I| {
         match endian {
             Endianness::Big => be_f64,
             Endianness::Little => le_f64,
@@ -2388,7 +2395,10 @@ where
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+///
+/// # Arguments
+/// * `f` The parser to apply.
 ///
 /// # Example
 ///
@@ -2398,6 +2408,7 @@ where
 /// use winnow::Bytes;
 /// use winnow::binary::be_u16;
 /// use winnow::binary::length_take;
+/// use winnow::token::tag;
 ///
 /// type Stream<'i> = Partial<&'i Bytes>;
 ///
@@ -2412,27 +2423,43 @@ where
 /// assert_eq!(parser(stream(b"\x00\x03abcefg")), Ok((stream(&b"efg"[..]), &b"abc"[..])));
 /// assert_eq!(parser(stream(b"\x00\x03a")), Err(ErrMode::Incomplete(Needed::new(2))));
 /// ```
-pub fn length_take<Input, Count, Error, CountParser>(
-    mut count: CountParser,
-) -> impl Parser<Input, <Input as Stream>::Slice, Error>
+pub fn length_take<I, N, E, F>(mut f: F) -> impl Parser<I, <I as Stream>::Slice, E>
 where
-    Input: StreamIsPartial + Stream,
-    Count: ToUsize,
-    CountParser: Parser<Input, Count, Error>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream,
+    N: ToUsize,
+    F: Parser<I, N, E>,
+    E: ParserError<I>,
 {
-    trace("length_take", move |i: &mut Input| {
-        let length = count.parse_next(i)?;
+    trace("length_take", move |i: &mut I| {
+        let length = f.parse_next(i)?;
 
         crate::token::take(length).parse_next(i)
     })
+}
+
+/// Deprecated since 0.5.27, replaced with [`length_take`]
+#[deprecated(since = "0.5.27", note = "Replaced with `length_take`")]
+pub fn length_data<I, N, E, F>(f: F) -> impl Parser<I, <I as Stream>::Slice, E>
+where
+    I: StreamIsPartial,
+    I: Stream,
+    N: ToUsize,
+    F: Parser<I, N, E>,
+    E: ParserError<I>,
+{
+    length_take(f)
 }
 
 /// Parse a length-prefixed slice ([TLV](https://en.wikipedia.org/wiki/Type-length-value))
 ///
 /// *Complete version*: Returns an error if there is not enough input data.
 ///
-/// *[Partial version][crate::_topic::partial]*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+/// *Partial version*: Will return `Err(winnow::error::ErrMode::Incomplete(_))` if there is not enough data.
+///
+/// # Arguments
+/// * `f` The parser to apply.
+/// * `g` The parser to apply on the subslice.
 ///
 /// # Example
 ///
@@ -2442,6 +2469,7 @@ where
 /// use winnow::Bytes;
 /// use winnow::binary::be_u16;
 /// use winnow::binary::length_and_then;
+/// use winnow::token::tag;
 ///
 /// type Stream<'i> = Partial<&'i Bytes>;
 ///
@@ -2463,29 +2491,45 @@ where
 /// assert_eq!(parser(stream(b"\x00\x03123123")), Err(ErrMode::Backtrack(InputError::new(complete_stream(&b"123"[..]), ErrorKind::Tag))));
 /// assert_eq!(parser(stream(b"\x00\x03a")), Err(ErrMode::Incomplete(Needed::new(2))));
 /// ```
-pub fn length_and_then<Input, Output, Count, Error, CountParser, ParseNext>(
-    mut count: CountParser,
-    mut parser: ParseNext,
-) -> impl Parser<Input, Output, Error>
+pub fn length_and_then<I, O, N, E, F, G>(mut f: F, mut g: G) -> impl Parser<I, O, E>
 where
-    Input: StreamIsPartial + Stream + UpdateSlice + Clone,
-    Count: ToUsize,
-    CountParser: Parser<Input, Count, Error>,
-    ParseNext: Parser<Input, Output, Error>,
-    Error: ParserError<Input>,
+    I: StreamIsPartial,
+    I: Stream + UpdateSlice + Clone,
+    N: ToUsize,
+    F: Parser<I, N, E>,
+    G: Parser<I, O, E>,
+    E: ParserError<I>,
 {
-    trace("length_and_then", move |i: &mut Input| {
-        let data = length_take(count.by_ref()).parse_next(i)?;
-        let mut data = Input::update_slice(i.clone(), data);
+    trace("length_and_then", move |i: &mut I| {
+        let data = length_take(f.by_ref()).parse_next(i)?;
+        let mut data = I::update_slice(i.clone(), data);
         let _ = data.complete();
-        let o = parser.by_ref().complete_err().parse_next(&mut data)?;
+        let o = g.by_ref().complete_err().parse_next(&mut data)?;
         Ok(o)
     })
+}
+
+/// Deprecated since 0.5.27, replaced with [`length_and_then`]
+#[deprecated(since = "0.5.27", note = "Replaced with `length_and_then`")]
+pub fn length_value<I, O, N, E, F, G>(f: F, g: G) -> impl Parser<I, O, E>
+where
+    I: StreamIsPartial,
+    I: Stream + UpdateSlice + Clone,
+    N: ToUsize,
+    F: Parser<I, N, E>,
+    G: Parser<I, O, E>,
+    E: ParserError<I>,
+{
+    length_and_then(f, g)
 }
 
 /// [`Accumulate`] a length-prefixed sequence of values ([TLV](https://en.wikipedia.org/wiki/Type-length-value))
 ///
 /// If the length represents token counts, see instead [`length_take`]
+///
+/// # Arguments
+/// * `f` The parser to apply to obtain the count.
+/// * `g` The parser to apply repeatedly.
 ///
 /// # Example
 ///
@@ -2496,7 +2540,8 @@ where
 /// # use winnow::prelude::*;
 /// use winnow::Bytes;
 /// use winnow::binary::u8;
-/// use winnow::binary::length_repeat;
+/// use winnow::binary::length_count;
+/// use winnow::token::tag;
 ///
 /// type Stream<'i> = &'i Bytes;
 ///
@@ -2505,7 +2550,7 @@ where
 /// }
 ///
 /// fn parser(s: Stream<'_>) -> IResult<Stream<'_>, Vec<&[u8]>> {
-///   length_repeat(u8.map(|i| {
+///   length_count(u8.map(|i| {
 ///      println!("got number: {}", i);
 ///      i
 ///   }), "abc").parse_peek(s)
@@ -2515,21 +2560,32 @@ where
 /// assert_eq!(parser(stream(b"\x03123123123")), Err(ErrMode::Backtrack(InputError::new(stream(b"123123123"), ErrorKind::Tag))));
 /// # }
 /// ```
-pub fn length_repeat<Input, Output, Accumulator, Count, Error, CountParser, ParseNext>(
-    mut count: CountParser,
-    mut parser: ParseNext,
-) -> impl Parser<Input, Accumulator, Error>
+pub fn length_repeat<I, O, C, N, E, F, G>(mut f: F, mut g: G) -> impl Parser<I, C, E>
 where
-    Input: Stream,
-    Count: ToUsize,
-    Accumulator: Accumulate<Output>,
-    CountParser: Parser<Input, Count, Error>,
-    ParseNext: Parser<Input, Output, Error>,
-    Error: ParserError<Input>,
+    I: Stream,
+    N: ToUsize,
+    C: Accumulate<O>,
+    F: Parser<I, N, E>,
+    G: Parser<I, O, E>,
+    E: ParserError<I>,
 {
-    trace("length_repeat", move |i: &mut Input| {
-        let n = count.parse_next(i)?;
+    trace("length_repeat", move |i: &mut I| {
+        let n = f.parse_next(i)?;
         let n = n.to_usize();
-        repeat(n, parser.by_ref()).parse_next(i)
+        repeat(n, g.by_ref()).parse_next(i)
     })
+}
+
+/// Deprecated since 0.5.27, replaced with [`length_repeat`]
+#[deprecated(since = "0.5.27", note = "Replaced with `length_repeat`")]
+pub fn length_count<I, O, C, N, E, F, G>(f: F, g: G) -> impl Parser<I, C, E>
+where
+    I: Stream,
+    N: ToUsize,
+    C: Accumulate<O>,
+    F: Parser<I, N, E>,
+    G: Parser<I, O, E>,
+    E: ParserError<I>,
+{
+    length_repeat(f, g)
 }

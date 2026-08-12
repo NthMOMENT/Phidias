@@ -1,5 +1,5 @@
 #[derive(Copy, Clone)]
-pub(crate) struct Encoder;
+pub struct Encoder;
 
 impl toml_test_harness::Encoder for Encoder {
     fn name(&self) -> &str {
@@ -14,9 +14,9 @@ impl toml_test_harness::Encoder for Encoder {
 
 fn decoded_to_document(
     decoded: &toml_test_harness::Decoded,
-) -> Result<toml_edit::DocumentMut, toml_test_harness::Error> {
+) -> Result<toml_edit::Document, toml_test_harness::Error> {
     let item = root_from_decoded(decoded)?;
-    let mut doc = toml_edit::DocumentMut::new();
+    let mut doc = toml_edit::Document::new();
     *doc = item;
     Ok(doc)
 }

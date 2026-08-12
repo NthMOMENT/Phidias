@@ -18,7 +18,7 @@ impl TryFrom<VersionedMessage> for SanitizedVersionedMessage {
 
 impl SanitizedVersionedMessage {
     pub fn try_new(message: VersionedMessage) -> Result<Self, SanitizeError> {
-        message.sanitize()?;
+        message.sanitize(true /* require_static_program_ids */)?;
         Ok(Self { message })
     }
 

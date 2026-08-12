@@ -1,7 +1,6 @@
 #![no_std]
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[cfg(not(miri))]
 #[inline]
 #[must_use]
 fn optimizer_hide(mut value: u8) -> u8 {
@@ -18,10 +17,9 @@ fn optimizer_hide(mut value: u8) -> u8 {
     target_arch = "riscv32",
     target_arch = "riscv64"
 ))]
-#[cfg(not(miri))]
+#[allow(asm_sub_register)]
 #[inline]
 #[must_use]
-#[allow(asm_sub_register)]
 fn optimizer_hide(mut value: u8) -> u8 {
     // SAFETY: the input value is passed unchanged to the output, the inline assembly does nothing.
     unsafe {
@@ -30,32 +28,19 @@ fn optimizer_hide(mut value: u8) -> u8 {
     }
 }
 
-#[cfg(any(
-    not(any(
-        target_arch = "x86",
-        target_arch = "x86_64",
-        target_arch = "arm",
-        target_arch = "aarch64",
-        target_arch = "riscv32",
-        target_arch = "riscv64",
-    )),
-    miri,
-))]
-#[inline(never)]
+#[cfg(not(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "arm",
+    target_arch = "aarch64",
+    target_arch = "riscv32",
+    target_arch = "riscv64"
+)))]
+#[inline(never)] // This function is non-inline to prevent the optimizer from looking inside it.
 #[must_use]
 fn optimizer_hide(value: u8) -> u8 {
-    // The current implementation of black_box in the main codegen backends is similar to
-    // {
-    //     let result = value;
-    //     asm!("", in(reg) &result);
-    //     result
-    // }
-    // which round-trips the value through the stack, instead of leaving it in a register.
-    // Experimental codegen backends might implement black_box as a pure identity function,
-    // without the expected optimization barrier, so it's less guaranteed than inline asm.
-    // For that reason, we also use the #[inline(never)] hint, which makes it harder for an
-    // optimizer to look inside this function.
-    core::hint::black_box(value)
+    // SAFETY: the result of casting a reference to a pointer is valid; the type is Copy.
+    unsafe { core::ptr::read_volatile(&value) }
 }
 
 #[inline]
@@ -123,6 +108,7 @@ fn constant_time_ne_n<const N: usize>(a: &[u8; N], b: &[u8; N]) -> u8 {
 /// assert!(constant_time_eq_n(&[3; 20], &[3; 20]));
 /// assert!(!constant_time_eq_n(&[3; 20], &[7; 20]));
 /// ```
+#[inline]
 #[must_use]
 pub fn constant_time_eq_n<const N: usize>(a: &[u8; N], b: &[u8; N]) -> bool {
     constant_time_ne_n(a, b) == 0
@@ -176,57 +162,4 @@ pub fn constant_time_eq_32(a: &[u8; 32], b: &[u8; 32]) -> bool {
 #[must_use]
 pub fn constant_time_eq_64(a: &[u8; 64], b: &[u8; 64]) -> bool {
     constant_time_eq_n(a, b)
-}
-
-#[cfg(test)]
-mod tests {
-    #[cfg(feature = "count_instructions_test")]
-    extern crate std;
-
-    #[cfg(feature = "count_instructions_test")]
-    #[test]
-    fn count_optimizer_hide_instructions() -> std::io::Result<()> {
-        use super::optimizer_hide;
-        use count_instructions::count_instructions;
-
-        fn count() -> std::io::Result<usize> {
-            // If optimizer_hide does not work, constant propagation and folding
-            // will make this identical to count_optimized() below.
-            let mut count = 0;
-            assert_eq!(
-                10u8,
-                count_instructions(
-                    || optimizer_hide(1)
-                        + optimizer_hide(2)
-                        + optimizer_hide(3)
-                        + optimizer_hide(4),
-                    |_| count += 1
-                )?
-            );
-            Ok(count)
-        }
-
-        fn count_optimized() -> std::io::Result<usize> {
-            #[inline]
-            fn inline_identity(value: u8) -> u8 {
-                value
-            }
-
-            let mut count = 0;
-            assert_eq!(
-                10u8,
-                count_instructions(
-                    || inline_identity(1)
-                        + inline_identity(2)
-                        + inline_identity(3)
-                        + inline_identity(4),
-                    |_| count += 1
-                )?
-            );
-            Ok(count)
-        }
-
-        assert!(count()? > count_optimized()?);
-        Ok(())
-    }
 }

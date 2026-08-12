@@ -1,53 +1,27 @@
-#![recursion_limit = "128"]
-#![cfg_attr(
-    feature = "force_exhaustive_checks",
-    feature(non_exhaustive_omitted_patterns_lint)
-)]
-#![allow(clippy::needless_lifetimes)]
-
+// TODO: re-enable this lint when we bump msrv to 1.58
+#![allow(clippy::uninlined_format_args)]
 extern crate proc_macro;
 use proc_macro::TokenStream;
-#[cfg(feature = "schema")]
 use proc_macro2::Span;
-use syn::{DeriveInput, Error, ItemEnum, ItemStruct, ItemUnion, Path};
+use proc_macro_crate::crate_name;
+use syn::{Ident, ItemEnum, ItemStruct, ItemUnion};
 
-///  by convention, local to borsh-derive crate, imports from proc_macro (1) are not allowed in `internals` module or in any of its submodules.
-mod internals;
+use borsh_derive_internal::*;
+use borsh_schema_derive_internal::*;
 
-use crate::internals::attributes::item;
-
-#[cfg(feature = "schema")]
-use internals::schema;
-use internals::{cratename, deserialize, serialize};
-
-fn check_attrs_get_cratename(input: &TokenStream) -> Result<Path, Error> {
-    let input = input.clone();
-
-    let derive_input = syn::parse::<DeriveInput>(input)?;
-
-    item::check_attributes(&derive_input)?;
-
-    cratename::get(&derive_input.attrs)
-}
-
-/// ---
-///
-/// moved to docs of **Derive Macro** `BorshSerialize` in `borsh` crate
-#[proc_macro_derive(BorshSerialize, attributes(borsh))]
+#[proc_macro_derive(BorshSerialize, attributes(borsh_skip))]
 pub fn borsh_serialize(input: TokenStream) -> TokenStream {
-    let cratename = match check_attrs_get_cratename(&input) {
-        Ok(cratename) => cratename,
-        Err(err) => {
-            return err.to_compile_error().into();
-        }
-    };
+    let cratename = Ident::new(
+        &crate_name("borsh").unwrap_or_else(|_| "borsh".to_string()),
+        Span::call_site(),
+    );
 
     let res = if let Ok(input) = syn::parse::<ItemStruct>(input.clone()) {
-        serialize::structs::process(&input, cratename)
+        struct_ser(&input, cratename)
     } else if let Ok(input) = syn::parse::<ItemEnum>(input.clone()) {
-        serialize::enums::process(&input, cratename)
+        enum_ser(&input, cratename)
     } else if let Ok(input) = syn::parse::<ItemUnion>(input) {
-        serialize::unions::process(&input, cratename)
+        union_ser(&input, cratename)
     } else {
         // Derive macros can only be defined on structs, enums, and unions.
         unreachable!()
@@ -58,24 +32,19 @@ pub fn borsh_serialize(input: TokenStream) -> TokenStream {
     })
 }
 
-/// ---
-///
-/// moved to docs of **Derive Macro** `BorshDeserialize` in `borsh` crate
-#[proc_macro_derive(BorshDeserialize, attributes(borsh))]
+#[proc_macro_derive(BorshDeserialize, attributes(borsh_skip, borsh_init))]
 pub fn borsh_deserialize(input: TokenStream) -> TokenStream {
-    let cratename = match check_attrs_get_cratename(&input) {
-        Ok(cratename) => cratename,
-        Err(err) => {
-            return err.to_compile_error().into();
-        }
-    };
+    let cratename = Ident::new(
+        &crate_name("borsh").unwrap_or_else(|_| "borsh".to_string()),
+        Span::call_site(),
+    );
 
     let res = if let Ok(input) = syn::parse::<ItemStruct>(input.clone()) {
-        deserialize::structs::process(&input, cratename)
+        struct_de(&input, cratename)
     } else if let Ok(input) = syn::parse::<ItemEnum>(input.clone()) {
-        deserialize::enums::process(&input, cratename)
+        enum_de(&input, cratename)
     } else if let Ok(input) = syn::parse::<ItemUnion>(input) {
-        deserialize::unions::process(&input, cratename)
+        union_de(&input, cratename)
     } else {
         // Derive macros can only be defined on structs, enums, and unions.
         unreachable!()
@@ -86,23 +55,17 @@ pub fn borsh_deserialize(input: TokenStream) -> TokenStream {
     })
 }
 
-/// ---
-///
-/// moved to docs of **Derive Macro** `BorshSchema` in `borsh` crate
-#[cfg(feature = "schema")]
-#[proc_macro_derive(BorshSchema, attributes(borsh))]
+#[proc_macro_derive(BorshSchema, attributes(borsh_skip))]
 pub fn borsh_schema(input: TokenStream) -> TokenStream {
-    let cratename = match check_attrs_get_cratename(&input) {
-        Ok(cratename) => cratename,
-        Err(err) => {
-            return err.to_compile_error().into();
-        }
-    };
+    let cratename = Ident::new(
+        &crate_name("borsh").unwrap_or_else(|_| "borsh".to_string()),
+        Span::call_site(),
+    );
 
     let res = if let Ok(input) = syn::parse::<ItemStruct>(input.clone()) {
-        schema::structs::process(&input, cratename)
+        process_struct(&input, cratename)
     } else if let Ok(input) = syn::parse::<ItemEnum>(input.clone()) {
-        schema::enums::process(&input, cratename)
+        process_enum(&input, cratename)
     } else if syn::parse::<ItemUnion>(input).is_ok() {
         Err(syn::Error::new(
             Span::call_site(),

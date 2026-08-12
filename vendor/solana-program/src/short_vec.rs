@@ -1,6 +1,6 @@
 //! Compact serde-encoding of vectors with small length.
 
-#![allow(clippy::arithmetic_side_effects)]
+#![allow(clippy::integer_arithmetic)]
 use {
     serde::{
         de::{self, Deserializer, SeqAccess, Visitor},

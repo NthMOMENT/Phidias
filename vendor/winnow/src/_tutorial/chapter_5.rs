@@ -35,7 +35,7 @@
 //! #
 //! # fn parse_bin_digits<'s>(input: &mut &'s str) -> PResult<&'s str> {
 //! #     take_while(1.., (
-//! #         ('0'..='1'),
+//! #         ('0'..='7'),
 //! #     )).parse_next(input)
 //! # }
 //! #
@@ -100,7 +100,7 @@
 //! #
 //! # fn parse_bin_digits<'s>(input: &mut &'s str) -> PResult<&'s str> {
 //! #     take_while(1.., (
-//! #         ('0'..='1'),
+//! #         ('0'..='7'),
 //! #     )).parse_next(input)
 //! # }
 //! #
@@ -136,8 +136,8 @@
 //! # }
 //! ```
 //!
-//! You'll notice that the above allows trailing `,`. However, if that's not desired, it
-//! can easily be fixed by using [`separated`] instead of [`repeat`]:
+//! You'll notice that the above allows trailing `,` when we intended to not support that. We can
+//! easily fix this by using [`separated`]:
 //! ```rust
 //! # use winnow::prelude::*;
 //! # use winnow::token::take_while;
@@ -163,7 +163,7 @@
 //! #
 //! # fn parse_bin_digits<'s>(input: &mut &'s str) -> PResult<&'s str> {
 //! #     take_while(1.., (
-//! #         ('0'..='1'),
+//! #         ('0'..='7'),
 //! #     )).parse_next(input)
 //! # }
 //! #
@@ -199,22 +199,9 @@
 //! }
 //! ```
 //!
-//! If you look closely at [`separated`] and [`repeat`], they aren't limited to collecting
-//! the result into a [`Vec`], but rather anything that implements the [`Accumulate`] trait.
-//! [`Accumulate`] is for instance also implemented for [`HashSet`], [`String`] and `()`.
-//!
-//! This lets us build more complex parsers than we did in
-//! [`chapter_2`] by accumulating the results into a `()` and [`take`][Parser::take]-ing
-//! the consumed input.
-//!
-//! `take` works by
-//! 1. Creating a [`checkpoint`][Stream::checkpoint]
-//! 2. Running the inner parser, in our case the `parse_list` parser, which will advance the input
-//! 3. Returning the slice from the first checkpoint to the current position.
-//!
-//! Since the result of `parse_list` gets thrown away, we
-//! accumulates into a `()` to not waste work creating an unused `Vec`.
-//!
+//! If you look closely at [`repeat`], it isn't collecting directly into a [`Vec`] but
+//! [`Accumulate`] to gather the results. This lets us make more complex parsers than we did in
+//! [`chapter_2`] by accumulating the results into a `()` and [`recognize`][Parser::recognize]-ing the captured input:
 //! ```rust
 //! # use winnow::prelude::*;
 //! # use winnow::token::take_while;
@@ -223,8 +210,8 @@
 //! # use winnow::combinator::fail;
 //! # use winnow::combinator::separated;
 //! #
-//! fn take_list<'s>(input: &mut &'s str) -> PResult<&'s str> {
-//!     parse_list.take().parse_next(input)
+//! fn recognize_list<'s>(input: &mut &'s str) -> PResult<&'s str> {
+//!     parse_list.recognize().parse_next(input)
 //! }
 //!
 //! fn parse_list(input: &mut &str) -> PResult<()> {
@@ -243,7 +230,7 @@
 //! #
 //! # fn parse_bin_digits<'s>(input: &mut &'s str) -> PResult<&'s str> {
 //! #     take_while(1.., (
-//! #         ('0'..='1'),
+//! #         ('0'..='7'),
 //! #     )).parse_next(input)
 //! # }
 //! #
@@ -270,7 +257,7 @@
 //! fn main() {
 //!     let mut input = "0x1a2b,0x3c4d,0x5e6f Hello";
 //!
-//!     let digits = take_list.parse_next(&mut input).unwrap();
+//!     let digits = recognize_list.parse_next(&mut input).unwrap();
 //!
 //!     assert_eq!(input, " Hello");
 //!     assert_eq!(digits, "0x1a2b,0x3c4d,0x5e6f");
@@ -287,9 +274,7 @@ use crate::combinator;
 use crate::combinator::repeat;
 use crate::combinator::separated;
 use crate::stream::Accumulate;
-use crate::stream::Stream;
 use crate::Parser;
-use std::collections::HashSet;
 use std::vec::Vec;
 
 pub use super::chapter_4 as previous;

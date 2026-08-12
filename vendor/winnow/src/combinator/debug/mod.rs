@@ -7,6 +7,9 @@ use crate::error::ErrMode;
 use crate::stream::Stream;
 use crate::Parser;
 
+#[cfg(all(feature = "debug", not(feature = "std")))]
+compile_error!("`debug` requires `std`");
+
 /// Trace the execution of the parser
 ///
 /// Note that [`Parser::context`] also provides high level trace information.
@@ -61,14 +64,6 @@ pub(crate) fn trace_result<T, E>(
         let depth = internals::Depth::existing();
         let severity = internals::Severity::with_result(res);
         internals::result(*depth, &name, severity);
-    }
-}
-
-pub(crate) struct DisplayDebug<D>(pub(crate) D);
-
-impl<D: crate::lib::std::fmt::Debug> crate::lib::std::fmt::Display for DisplayDebug<D> {
-    fn fmt(&self, f: &mut crate::lib::std::fmt::Formatter<'_>) -> crate::lib::std::fmt::Result {
-        write!(f, "{:?}", self.0)
     }
 }
 

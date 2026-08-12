@@ -4,6 +4,7 @@ use crate::prelude::*;
 mod complete {
     use super::*;
     use crate::combinator::alt;
+    use crate::combinator::opt;
     use crate::error::ErrMode;
     use crate::error::ErrorKind;
     use crate::error::InputError;
@@ -426,63 +427,52 @@ mod complete {
         );
     }
 
-    #[test]
-    fn dec_uint_tests() {
-        fn dec_u32(input: &[u8]) -> IResult<&[u8], u32> {
-            dec_uint.parse_peek(input)
-        }
+    fn digit_to_i16(input: &str) -> IResult<&str, i16> {
+        let i = input;
+        let (i, opt_sign) = opt(alt(('+', '-'))).parse_peek(i)?;
+        let sign = match opt_sign {
+            Some('+') | None => true,
+            Some('-') => false,
+            _ => unreachable!(),
+        };
 
-        assert_parse!(
-            dec_u32(&b";"[..]),
-            Err(ErrMode::Backtrack(error_position!(
-                &&b";"[..],
-                ErrorKind::Verify
-            )))
-        );
-        assert_parse!(dec_u32(&b"0;"[..]), Ok((&b";"[..], 0)));
-        assert_parse!(dec_u32(&b"1;"[..]), Ok((&b";"[..], 1)));
-        assert_parse!(dec_u32(&b"32;"[..]), Ok((&b";"[..], 32)));
-        assert_parse!(
-            dec_u32(&b"1000000000000000000000;"[..]), // overflow
-            Err(ErrMode::Backtrack(error_position!(
-                &&b"1000000000000000000000;"[..],
-                ErrorKind::Verify
-            )))
-        );
+        let (i, s) = digit1::<_, InputError<_>>.parse_peek(i)?;
+        match s.parse_slice() {
+            Some(n) => {
+                if sign {
+                    Ok((i, n))
+                } else {
+                    Ok((i, -n))
+                }
+            }
+            None => Err(ErrMode::from_error_kind(&i, ErrorKind::Verify)),
+        }
     }
 
-    #[test]
-    fn dec_int_tests() {
-        fn dec_i32(input: &[u8]) -> IResult<&[u8], i32> {
-            dec_int.parse_peek(input)
+    fn digit_to_u32(i: &str) -> IResult<&str, u32> {
+        let (i, s) = digit1.parse_peek(i)?;
+        match s.parse_slice() {
+            Some(n) => Ok((i, n)),
+            None => Err(ErrMode::from_error_kind(&i, ErrorKind::Verify)),
         }
+    }
 
-        assert_parse!(
-            dec_i32(&b";"[..]),
-            Err(ErrMode::Backtrack(error_position!(
-                &&b";"[..],
-                ErrorKind::Verify
-            )))
-        );
-        assert_parse!(dec_i32(&b"0;"[..]), Ok((&b";"[..], 0)));
-        assert_parse!(dec_i32(&b"1;"[..]), Ok((&b";"[..], 1)));
-        assert_parse!(dec_i32(&b"32;"[..]), Ok((&b";"[..], 32)));
-        assert_parse!(
-            dec_i32(&b"-0;"[..]),
-            Err(ErrMode::Backtrack(error_position!(
-                &&b"-0;"[..],
-                ErrorKind::Verify
-            )))
-        );
-        assert_parse!(dec_i32(&b"-1;"[..]), Ok((&b";"[..], -1)));
-        assert_parse!(dec_i32(&b"-32;"[..]), Ok((&b";"[..], -32)));
-        assert_parse!(
-            dec_i32(&b"1000000000000000000000;"[..]), // overflow
-            Err(ErrMode::Backtrack(error_position!(
-                &&b"1000000000000000000000;"[..],
-                ErrorKind::Verify
-            )))
-        );
+    proptest! {
+      #[test]
+      #[cfg_attr(miri, ignore)]  // See https://github.com/AltSysrq/proptest/issues/253
+      fn ints(s in "\\PC*") {
+          let res1 = digit_to_i16(&s);
+          let res2 = dec_int.parse_peek(s.as_str());
+          assert_eq!(res1, res2);
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]  // See https://github.com/AltSysrq/proptest/issues/253
+      fn uints(s in "\\PC*") {
+          let res1 = digit_to_u32(&s);
+          let res2 = dec_uint.parse_peek(s.as_str());
+          assert_eq!(res1, res2);
+      }
     }
 
     #[test]
@@ -574,7 +564,7 @@ mod complete {
             let expected32 = str::parse::<f32>(test).unwrap();
             let expected64 = str::parse::<f64>(test).unwrap();
 
-            println!("now parsing: {test} -> {expected32}");
+            println!("now parsing: {} -> {}", test, expected32);
 
             assert_parse!(
                 float.parse_peek(test.as_bytes()),
@@ -598,7 +588,7 @@ mod complete {
         let nan_test_cases = ["nan", "NaN", "NAN"];
 
         for test in nan_test_cases {
-            println!("now parsing: {test}");
+            println!("now parsing: {}", test);
 
             let (remaining, parsed) = float::<_, f32, ()>.parse_peek(test.as_bytes()).unwrap();
             assert!(parsed.is_nan());
@@ -620,7 +610,7 @@ mod complete {
 
     #[cfg(feature = "std")]
     fn parse_f64(i: &str) -> IResult<&str, f64, ()> {
-        match take_float_or_exceptions.parse_peek(i) {
+        match super::recognize_float_or_exceptions.parse_peek(i) {
             Err(e) => Err(e),
             Ok((i, s)) => {
                 if s.is_empty() {
@@ -639,21 +629,21 @@ mod complete {
       #[cfg(feature = "std")]
       #[cfg_attr(miri, ignore)]  // See https://github.com/AltSysrq/proptest/issues/253
       fn floats(s in "\\PC*") {
-          println!("testing {s}");
+          println!("testing {}", s);
           let res1 = parse_f64(&s);
           let res2 = float::<_, f64, ()>.parse_peek(s.as_str());
           assert_eq!(res1, res2);
       }
     }
 
-    // issue #1336 "take_escaped hangs if normal parser accepts empty"
+    // issue #1336 "escaped hangs if normal parser accepts empty"
     #[test]
-    fn complete_take_escaped_hang() {
-        // issue #1336 "take_escaped hangs if normal parser accepts empty"
+    fn complete_escaped_hang() {
+        // issue #1336 "escaped hangs if normal parser accepts empty"
         fn escaped_string(input: &str) -> IResult<&str, &str> {
             use crate::ascii::alpha0;
             use crate::token::one_of;
-            take_escaped(alpha0, '\\', one_of(['n'])).parse_peek(input)
+            escaped(alpha0, '\\', one_of(['n'])).parse_peek(input)
         }
 
         escaped_string("7").unwrap();
@@ -661,8 +651,8 @@ mod complete {
     }
 
     #[test]
-    fn complete_take_escaped_hang_1118() {
-        // issue ##1118 take_escaped does not work with empty string
+    fn complete_escaped_hang_1118() {
+        // issue ##1118 escaped does not work with empty string
         fn unquote(input: &str) -> IResult<&str, &str> {
             use crate::combinator::delimited;
             use crate::combinator::opt;
@@ -670,7 +660,7 @@ mod complete {
 
             delimited(
                 '"',
-                take_escaped(
+                escaped(
                     opt(none_of(['\\', '"'])),
                     '\\',
                     one_of(['\\', '"', 'r', 'n', 't']),
@@ -691,7 +681,7 @@ mod complete {
         use crate::token::one_of;
 
         fn esc(i: &[u8]) -> IResult<&[u8], &[u8]> {
-            take_escaped(alpha, '\\', one_of(['\"', 'n', '\\'])).parse_peek(i)
+            escaped(alpha, '\\', one_of(['\"', 'n', '\\'])).parse_peek(i)
         }
         assert_eq!(esc(&b"abcd;"[..]), Ok((&b";"[..], &b"abcd"[..])));
         assert_eq!(esc(&b"ab\\\"cd;"[..]), Ok((&b";"[..], &b"ab\\\"cd"[..])));
@@ -715,7 +705,7 @@ mod complete {
         );
 
         fn esc2(i: &[u8]) -> IResult<&[u8], &[u8]> {
-            take_escaped(digit, '\\', one_of(['\"', 'n', '\\'])).parse_peek(i)
+            escaped(digit, '\\', one_of(['\"', 'n', '\\'])).parse_peek(i)
         }
         assert_eq!(esc2(&b"12\\nnn34"[..]), Ok((&b"nn34"[..], &b"12\\n"[..])));
     }
@@ -727,7 +717,7 @@ mod complete {
         use crate::token::one_of;
 
         fn esc(i: &str) -> IResult<&str, &str> {
-            take_escaped(alpha, '\\', one_of(['\"', 'n', '\\'])).parse_peek(i)
+            escaped(alpha, '\\', one_of(['\"', 'n', '\\'])).parse_peek(i)
         }
         assert_eq!(esc("abcd;"), Ok((";", "abcd")));
         assert_eq!(esc("ab\\\"cd;"), Ok((";", "ab\\\"cd")));
@@ -748,12 +738,12 @@ mod complete {
         );
 
         fn esc2(i: &str) -> IResult<&str, &str> {
-            take_escaped(digit, '\\', one_of(['\"', 'n', '\\'])).parse_peek(i)
+            escaped(digit, '\\', one_of(['\"', 'n', '\\'])).parse_peek(i)
         }
         assert_eq!(esc2("12\\nnn34"), Ok(("nn34", "12\\n")));
 
         fn esc3(i: &str) -> IResult<&str, &str> {
-            take_escaped(alpha, '\u{241b}', one_of(['\"', 'n'])).parse_peek(i)
+            escaped(alpha, '\u{241b}', one_of(['\"', 'n'])).parse_peek(i)
         }
         assert_eq!(esc3("ab␛ncd;"), Ok((";", "ab␛ncd")));
     }
@@ -762,7 +752,7 @@ mod complete {
     fn test_escaped_error() {
         fn esc(s: &str) -> IResult<&str, &str> {
             use crate::ascii::digit1;
-            take_escaped(digit1, '\\', one_of(['\"', 'n', '\\'])).parse_peek(s)
+            escaped(digit1, '\\', one_of(['\"', 'n', '\\'])).parse_peek(s)
         }
 
         assert_eq!(esc("abcd"), Ok(("abcd", "")));
@@ -910,11 +900,14 @@ mod complete {
 
 mod partial {
     use super::*;
+    use crate::combinator::opt;
     use crate::error::ErrorKind;
     use crate::error::InputError;
     use crate::error::{ErrMode, Needed};
+    use crate::stream::ParseSlice;
     use crate::IResult;
     use crate::Partial;
+    use proptest::prelude::*;
 
     macro_rules! assert_parse(
     ($left: expr, $right: expr) => {
@@ -1250,7 +1243,7 @@ mod partial {
         let d: &[u8] = b"ab12cd";
         assert_eq!(
             till_line_ending::<_, InputError<_>>.parse_peek(Partial::new(d)),
-            Err(ErrMode::Incomplete(Needed::Unknown))
+            Err(ErrMode::Incomplete(Needed::new(1)))
         );
     }
 
@@ -1268,7 +1261,7 @@ mod partial {
         let g2: &str = "ab12cd";
         assert_eq!(
             till_line_ending::<_, InputError<_>>.parse_peek(Partial::new(g2)),
-            Err(ErrMode::Incomplete(Needed::Unknown))
+            Err(ErrMode::Incomplete(Needed::new(1)))
         );
     }
 
@@ -1459,6 +1452,54 @@ mod partial {
                 ErrorKind::Tag
             )))
         );
+    }
+
+    fn digit_to_i16(input: Partial<&str>) -> IResult<Partial<&str>, i16> {
+        let i = input;
+        let (i, opt_sign) = opt(one_of(['+', '-'])).parse_peek(i)?;
+        let sign = match opt_sign {
+            Some('+') | None => true,
+            Some('-') => false,
+            _ => unreachable!(),
+        };
+
+        let (i, s) = digit1::<_, InputError<_>>.parse_peek(i)?;
+        match s.parse_slice() {
+            Some(n) => {
+                if sign {
+                    Ok((i, n))
+                } else {
+                    Ok((i, -n))
+                }
+            }
+            None => Err(ErrMode::from_error_kind(&i, ErrorKind::Verify)),
+        }
+    }
+
+    fn digit_to_u32(i: Partial<&str>) -> IResult<Partial<&str>, u32> {
+        let (i, s) = digit1.parse_peek(i)?;
+        match s.parse_slice() {
+            Some(n) => Ok((i, n)),
+            None => Err(ErrMode::from_error_kind(&i, ErrorKind::Verify)),
+        }
+    }
+
+    proptest! {
+      #[test]
+      #[cfg_attr(miri, ignore)]  // See https://github.com/AltSysrq/proptest/issues/253
+      fn ints(s in "\\PC*") {
+          let res1 = digit_to_i16(Partial::new(&s));
+          let res2 = dec_int.parse_peek(Partial::new(s.as_str()));
+          assert_eq!(res1, res2);
+      }
+
+      #[test]
+      #[cfg_attr(miri, ignore)]  // See https://github.com/AltSysrq/proptest/issues/253
+      fn uints(s in "\\PC*") {
+          let res1 = digit_to_u32(Partial::new(&s));
+          let res2 = dec_uint.parse_peek(Partial::new(s.as_str()));
+          assert_eq!(res1, res2);
+      }
     }
 
     #[test]

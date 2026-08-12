@@ -1,8 +1,6 @@
-use snapbox::assert_data_eq;
-use snapbox::prelude::*;
-use snapbox::str;
+use snapbox::assert_eq;
 
-use toml_edit::{DocumentMut, Item, Value};
+use toml_edit::{Document, Item, Value};
 
 #[test]
 fn table_into_inline() {
@@ -15,23 +13,22 @@ inline = { "1" = 1, "2" = 2 }
 [table.child]
 other = "world"
 "#;
-    let mut doc = toml.parse::<DocumentMut>().unwrap();
+    let mut doc = toml.parse::<Document>().unwrap();
 
     doc.get_mut("table").unwrap().make_value();
 
     let actual = doc.to_string();
     // `table=` is because we didn't re-format the table key, only the value
-    assert_data_eq!(actual, str![[r#"
-table= { string = "value", array = [1, 2, 3], inline = { "1" = 1, "2" = 2 }, child = { other = "world" } }
-
-"#]].raw());
+    let expected = r#"table= { string = "value", array = [1, 2, 3], inline = { "1" = 1, "2" = 2 }, child = { other = "world" } }
+"#;
+    assert_eq(expected, actual);
 }
 
 #[test]
 fn inline_table_to_table() {
     let toml = r#"table = { string = "value", array = [1, 2, 3], inline = { "1" = 1, "2" = 2 }, child = { other = "world" } }
 "#;
-    let mut doc = toml.parse::<DocumentMut>().unwrap();
+    let mut doc = toml.parse::<Document>().unwrap();
 
     let t = doc.remove("table").unwrap();
     let t = match t {
@@ -42,18 +39,13 @@ fn inline_table_to_table() {
     doc.insert("table", Item::Table(t));
 
     let actual = doc.to_string();
-    assert_data_eq!(
-        actual,
-        str![[r#"
-[table]
+    let expected = r#"[table]
 string = "value"
 array = [1, 2, 3]
 inline = { "1" = 1, "2" = 2 }
 child = { other = "world" }
-
-"#]]
-        .raw()
-    );
+"#;
+    assert_eq(expected, actual);
 }
 
 #[test]
@@ -75,14 +67,13 @@ inline = { "1" = 1, "2" = 2 }
 [table.child]
 other = "world"
 "#;
-    let mut doc = toml.parse::<DocumentMut>().unwrap();
+    let mut doc = toml.parse::<Document>().unwrap();
 
     doc.get_mut("table").unwrap().make_value();
 
     let actual = doc.to_string();
     // `table=` is because we didn't re-format the table key, only the value
-    assert_data_eq!(actual, str![[r#"
-table= [{ string = "value", array = [1, 2, 3], inline = { "1" = 1, "2" = 2 }, child = { other = "world" } }, { string = "value", array = [1, 2, 3], inline = { "1" = 1, "2" = 2 }, child = { other = "world" } }]
-
-"#]].raw());
+    let expected = r#"table= [{ string = "value", array = [1, 2, 3], inline = { "1" = 1, "2" = 2 }, child = { other = "world" } }, { string = "value", array = [1, 2, 3], inline = { "1" = 1, "2" = 2 }, child = { other = "world" } }]
+"#;
+    assert_eq(expected, actual);
 }

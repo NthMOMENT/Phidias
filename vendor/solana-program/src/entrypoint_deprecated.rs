@@ -7,7 +7,7 @@
 //!
 //! [`bpf_loader_deprecated`]: crate::bpf_loader_deprecated
 
-#![allow(clippy::arithmetic_side_effects)]
+#![allow(clippy::integer_arithmetic)]
 
 extern crate alloc;
 use {

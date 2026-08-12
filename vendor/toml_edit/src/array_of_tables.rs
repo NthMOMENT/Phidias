@@ -32,10 +32,8 @@ impl ArrayOfTables {
         a
     }
 
-    /// The location within the original document
-    ///
-    /// This generally requires an [`ImDocument`][crate::ImDocument].
-    pub fn span(&self) -> Option<std::ops::Range<usize>> {
+    /// Returns the location within the original document
+    pub(crate) fn span(&self) -> Option<std::ops::Range<usize>> {
         self.span.clone()
     }
 
@@ -64,14 +62,14 @@ impl ArrayOfTables {
         self.values.len()
     }
 
-    /// Returns true if `self.len() == 0`.
+    /// Returns true iff `self.len() == 0`.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     /// Removes all the tables.
     pub fn clear(&mut self) {
-        self.values.clear();
+        self.values.clear()
     }
 
     /// Returns an optional reference to the table.
@@ -160,7 +158,6 @@ impl<'s> IntoIterator for &'s ArrayOfTables {
     }
 }
 
-#[cfg(feature = "display")]
 impl std::fmt::Display for ArrayOfTables {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // HACK: Without the header, we don't really have a proper way of printing this

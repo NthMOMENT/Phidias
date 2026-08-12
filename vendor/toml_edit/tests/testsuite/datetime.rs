@@ -1,12 +1,8 @@
-use snapbox::assert_data_eq;
-use snapbox::prelude::*;
-use snapbox::str;
-
 macro_rules! bad {
     ($toml:expr, $msg:expr) => {
-        match $toml.parse::<toml_edit::DocumentMut>() {
+        match $toml.parse::<toml_edit::Document>() {
             Ok(s) => panic!("parsed to: {:#?}", s),
-            Err(e) => assert_data_eq!(e.to_string(), $msg.raw()),
+            Err(e) => snapbox::assert_eq($msg, e.to_string()),
         }
     };
 }
@@ -15,7 +11,7 @@ macro_rules! bad {
 fn times() {
     fn dogood(s: &str, serialized: &str) {
         let to_parse = format!("foo = {}", s);
-        let document = to_parse.parse::<toml_edit::DocumentMut>().unwrap();
+        let document = to_parse.parse::<toml_edit::Document>().unwrap();
         assert_eq!(
             document["foo"].as_datetime().unwrap().to_string(),
             serialized
@@ -47,252 +43,214 @@ fn times() {
 fn bad_times() {
     bad!(
         "foo = 199-09-09",
-        str![[r#"
+        "\
 TOML parse error at line 1, column 10
   |
 1 | foo = 199-09-09
   |          ^
 expected newline, `#`
-
-"#]]
+"
     );
     bad!(
         "foo = 199709-09",
-        str![[r#"
+        "\
 TOML parse error at line 1, column 13
   |
 1 | foo = 199709-09
   |             ^
 expected newline, `#`
-
-"#]]
+"
     );
     bad!(
         "foo = 1997-9-09",
-        str![[r#"
+        "\
 TOML parse error at line 1, column 12
   |
 1 | foo = 1997-9-09
   |            ^
 invalid date-time
-
-"#]]
+"
     );
     bad!(
         "foo = 1997-09-9",
-        str![[r#"
+        "\
 TOML parse error at line 1, column 15
   |
 1 | foo = 1997-09-9
   |               ^
 invalid date-time
-
-"#]]
+"
     );
     bad!(
         "foo = 1997-09-0909:09:09",
-        str![[r#"
+        "\
 TOML parse error at line 1, column 17
   |
 1 | foo = 1997-09-0909:09:09
   |                 ^
 expected newline, `#`
-
-"#]]
+"
     );
     bad!(
         "foo = 1997-09-09T09:09:09.",
-        str![[r#"
+        "\
 TOML parse error at line 1, column 26
   |
 1 | foo = 1997-09-09T09:09:09.
   |                          ^
 expected newline, `#`
-
-"#]]
+"
     );
     bad!(
         "foo = T",
-        str![[r#"
-TOML parse error at line 1, column 7
+        r#"TOML parse error at line 1, column 7
   |
 1 | foo = T
   |       ^
 invalid string
 expected `"`, `'`
-
-"#]]
+"#
     );
     bad!(
         "foo = T.",
-        str![[r#"
-TOML parse error at line 1, column 7
+        r#"TOML parse error at line 1, column 7
   |
 1 | foo = T.
   |       ^
 invalid string
 expected `"`, `'`
-
-"#]]
+"#
     );
     bad!(
         "foo = TZ",
-        str![[r#"
-TOML parse error at line 1, column 7
+        r#"TOML parse error at line 1, column 7
   |
 1 | foo = TZ
   |       ^
 invalid string
 expected `"`, `'`
-
-"#]]
+"#
     );
     bad!(
         "foo = 1997-09-09T09:09:09.09+",
-        str![[r#"
-TOML parse error at line 1, column 30
+        r#"TOML parse error at line 1, column 30
   |
 1 | foo = 1997-09-09T09:09:09.09+
   |                              ^
 invalid time offset
-
-"#]]
+"#
     );
     bad!(
         "foo = 1997-09-09T09:09:09.09+09",
-        str![[r#"
-TOML parse error at line 1, column 32
+        r#"TOML parse error at line 1, column 32
   |
 1 | foo = 1997-09-09T09:09:09.09+09
   |                                ^
 invalid time offset
-
-"#]]
+"#
     );
     bad!(
         "foo = 1997-09-09T09:09:09.09+09:9",
-        str![[r#"
-TOML parse error at line 1, column 33
+        r#"TOML parse error at line 1, column 33
   |
 1 | foo = 1997-09-09T09:09:09.09+09:9
   |                                 ^
 invalid time offset
-
-"#]]
+"#
     );
     bad!(
         "foo = 1997-09-09T09:09:09.09+0909",
-        str![[r#"
-TOML parse error at line 1, column 32
+        r#"TOML parse error at line 1, column 32
   |
 1 | foo = 1997-09-09T09:09:09.09+0909
   |                                ^
 invalid time offset
-
-"#]]
+"#
     );
     bad!(
         "foo = 1997-09-09T09:09:09.09-",
-        str![[r#"
-TOML parse error at line 1, column 30
+        r#"TOML parse error at line 1, column 30
   |
 1 | foo = 1997-09-09T09:09:09.09-
   |                              ^
 invalid time offset
-
-"#]]
+"#
     );
     bad!(
         "foo = 1997-09-09T09:09:09.09-09",
-        str![[r#"
-TOML parse error at line 1, column 32
+        r#"TOML parse error at line 1, column 32
   |
 1 | foo = 1997-09-09T09:09:09.09-09
   |                                ^
 invalid time offset
-
-"#]]
+"#
     );
     bad!(
         "foo = 1997-09-09T09:09:09.09-09:9",
-        str![[r#"
-TOML parse error at line 1, column 33
+        r#"TOML parse error at line 1, column 33
   |
 1 | foo = 1997-09-09T09:09:09.09-09:9
   |                                 ^
 invalid time offset
-
-"#]]
+"#
     );
     bad!(
         "foo = 1997-09-09T09:09:09.09-0909",
-        str![[r#"
-TOML parse error at line 1, column 32
+        r#"TOML parse error at line 1, column 32
   |
 1 | foo = 1997-09-09T09:09:09.09-0909
   |                                ^
 invalid time offset
-
-"#]]
+"#
     );
 
     bad!(
         "foo = 1997-00-09T09:09:09.09Z",
-        str![[r#"
-TOML parse error at line 1, column 12
+        r#"TOML parse error at line 1, column 12
   |
 1 | foo = 1997-00-09T09:09:09.09Z
   |            ^
 invalid date-time
 value is out of range
-
-"#]]
+"#
     );
     bad!(
         "foo = 1997-09-00T09:09:09.09Z",
-        str![[r#"
-TOML parse error at line 1, column 15
+        r#"TOML parse error at line 1, column 15
   |
 1 | foo = 1997-09-00T09:09:09.09Z
   |               ^
 invalid date-time
 value is out of range
-
-"#]]
+"#
     );
     bad!(
         "foo = 1997-09-09T30:09:09.09Z",
-        str![[r#"
-TOML parse error at line 1, column 17
+        r#"TOML parse error at line 1, column 17
   |
 1 | foo = 1997-09-09T30:09:09.09Z
   |                 ^
 expected newline, `#`
-
-"#]]
+"#
     );
     bad!(
         "foo = 1997-09-09T12:69:09.09Z",
-        str![[r#"
-TOML parse error at line 1, column 21
+        r#"TOML parse error at line 1, column 21
   |
 1 | foo = 1997-09-09T12:69:09.09Z
   |                     ^
 invalid date-time
 value is out of range
-
-"#]]
+"#
     );
     bad!(
         "foo = 1997-09-09T12:09:69.09Z",
-        str![[r#"
-TOML parse error at line 1, column 24
+        r#"TOML parse error at line 1, column 24
   |
 1 | foo = 1997-09-09T12:09:69.09Z
   |                        ^
 invalid date-time
 value is out of range
-
-"#]]
+"#
     );
 }

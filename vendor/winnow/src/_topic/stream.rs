@@ -5,7 +5,7 @@
 //! - Improved debug output like [`Bytes`]
 //! - [`Stateful`] for passing state through your parser, like tracking recursion
 //!   depth
-//! - [`LocatingSlice`] for looking up the absolute position of a token
+//! - [`Located`] for looking up the absolute position of a token
 //!
 //! But that won't always cut it for your parser. For example, you might lex `&str` into
 //! a series of tokens and then want to parse a `TokenStream`.
@@ -18,6 +18,7 @@
 //! The goal is to define parsers with this signature: `&mut MyStream -> PResult<Output>`.
 //! ```rust
 //! # use winnow::prelude::*;
+//! # use winnow::token::tag;
 //! # type MyStream<'i> = &'i str;
 //! # type Output<'i> = &'i str;
 //! fn parser<'s>(i: &mut MyStream<'s>) -> PResult<Output<'s>> {

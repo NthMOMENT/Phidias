@@ -10,18 +10,11 @@ use crate::error::ErrorKind;
 use crate::error::InputError;
 use crate::error::Needed;
 use crate::stream::AsChar;
-use crate::token::literal;
+use crate::token::tag;
 use crate::unpeek;
 use crate::IResult;
 use crate::Parser;
 use crate::Partial;
-
-macro_rules! assert_parse(
-  ($left: expr, $right: expr) => {
-    let res: $crate::IResult<_, _, InputError<_>> = $left;
-    assert_eq!(res, $right);
-  };
-);
 
 #[test]
 fn complete_take_while_m_n_utf8_all_matching() {
@@ -105,18 +98,9 @@ fn complete_take_until() {
 }
 
 #[test]
-fn complete_take_until_empty() {
-    fn take_until_empty(i: &str) -> IResult<&str, &str> {
-        take_until(0, "").parse_peek(i)
-    }
-    assert_eq!(take_until_empty(""), Ok(("", "")));
-    assert_eq!(take_until_empty("end"), Ok(("end", "")));
-}
-
-#[test]
-fn complete_literal_case_insensitive() {
+fn complete_tag_case_insensitive() {
     fn caseless_bytes(i: &[u8]) -> IResult<&[u8], &[u8]> {
-        literal(Caseless("ABcd")).parse_peek(i)
+        tag(Caseless("ABcd")).parse_peek(i)
     }
     assert_eq!(
         caseless_bytes(&b"aBCdefgh"[..]),
@@ -153,7 +137,7 @@ fn complete_literal_case_insensitive() {
     );
 
     fn caseless_str(i: &str) -> IResult<&str, &str> {
-        literal(Caseless("ABcd")).parse_peek(i)
+        tag(Caseless("ABcd")).parse_peek(i)
     }
     assert_eq!(caseless_str("aBCdefgh"), Ok(("efgh", "aBCd")));
     assert_eq!(caseless_str("abcdefgh"), Ok(("efgh", "abcd")));
@@ -175,7 +159,7 @@ fn complete_literal_case_insensitive() {
     );
 
     fn matches_kelvin(i: &str) -> IResult<&str, &str> {
-        literal(Caseless("k")).parse_peek(i)
+        tag(Caseless("k")).parse_peek(i)
     }
     assert_eq!(
         matches_kelvin("K"),
@@ -183,7 +167,7 @@ fn complete_literal_case_insensitive() {
     );
 
     fn is_kelvin(i: &str) -> IResult<&str, &str> {
-        literal(Caseless("K")).parse_peek(i)
+        tag(Caseless("K")).parse_peek(i)
     }
     assert_eq!(
         is_kelvin("k"),
@@ -192,12 +176,12 @@ fn complete_literal_case_insensitive() {
 }
 
 #[test]
-fn complete_literal_fixed_size_array() {
+fn complete_tag_fixed_size_array() {
     fn test(i: &[u8]) -> IResult<&[u8], &[u8]> {
-        literal([0x42]).parse_peek(i)
+        tag([0x42]).parse_peek(i)
     }
     fn test2(i: &[u8]) -> IResult<&[u8], &[u8]> {
-        literal(&[0x42]).parse_peek(i)
+        tag(&[0x42]).parse_peek(i)
     }
 
     let input = &[0x42, 0x00][..];
@@ -206,9 +190,9 @@ fn complete_literal_fixed_size_array() {
 }
 
 #[test]
-fn complete_literal_char() {
+fn complete_tag_char() {
     fn test(i: &[u8]) -> IResult<&[u8], &[u8]> {
-        literal('B').parse_peek(i)
+        tag('B').parse_peek(i)
     }
     assert_eq!(test(&[0x42, 0x00][..]), Ok((&b"\x00"[..], &b"\x42"[..])));
     assert_eq!(
@@ -221,9 +205,9 @@ fn complete_literal_char() {
 }
 
 #[test]
-fn complete_literal_byte() {
+fn complete_tag_byte() {
     fn test(i: &[u8]) -> IResult<&[u8], &[u8]> {
-        literal(b'B').parse_peek(i)
+        tag(b'B').parse_peek(i)
     }
     assert_eq!(test(&[0x42, 0x00][..]), Ok((&b"\x00"[..], &b"\x42"[..])));
     assert_eq!(
@@ -272,7 +256,7 @@ fn partial_one_of_test() {
 
 #[test]
 fn char_byteslice() {
-    fn f(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, char> {
+    fn f(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, u8> {
         'c'.parse_peek(i)
     }
 
@@ -281,12 +265,12 @@ fn char_byteslice() {
         f(Partial::new(a)),
         Err(ErrMode::Backtrack(error_position!(
             &Partial::new(a),
-            ErrorKind::Tag
+            ErrorKind::Verify
         )))
     );
 
     let b = &b"cde"[..];
-    assert_eq!(f(Partial::new(b)), Ok((Partial::new(&b"de"[..]), 'c')));
+    assert_eq!(f(Partial::new(b)), Ok((Partial::new(&b"de"[..]), b'c')));
 }
 
 #[test]
@@ -300,7 +284,7 @@ fn char_str() {
         f(Partial::new(a)),
         Err(ErrMode::Backtrack(error_position!(
             &Partial::new(a),
-            ErrorKind::Tag
+            ErrorKind::Verify
         )))
     );
 
@@ -405,14 +389,16 @@ fn partial_take_until_incomplete_s() {
 }
 
 #[test]
-fn partial_take() {
+fn partial_recognize() {
     use crate::ascii::{
         alpha1 as alpha, alphanumeric1 as alphanumeric, digit1 as digit, hex_digit1 as hex_digit,
         multispace1 as multispace, oct_digit1 as oct_digit, space1 as space,
     };
 
     fn x(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
-        delimited("<!--", take(5_usize), "-->").take().parse_peek(i)
+        delimited("<!--", take(5_usize), "-->")
+            .recognize()
+            .parse_peek(i)
     }
     let r = x(Partial::new(&b"<!-- abc --> aaa"[..]));
     assert_eq!(r, Ok((Partial::new(&b" aaa"[..]), &b"<!-- abc -->"[..])));
@@ -420,43 +406,43 @@ fn partial_take() {
     let semicolon = &b";"[..];
 
     fn ya(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
-        alpha.take().parse_peek(i)
+        alpha.recognize().parse_peek(i)
     }
     let ra = ya(Partial::new(&b"abc;"[..]));
     assert_eq!(ra, Ok((Partial::new(semicolon), &b"abc"[..])));
 
     fn yd(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
-        digit.take().parse_peek(i)
+        digit.recognize().parse_peek(i)
     }
     let rd = yd(Partial::new(&b"123;"[..]));
     assert_eq!(rd, Ok((Partial::new(semicolon), &b"123"[..])));
 
     fn yhd(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
-        hex_digit.take().parse_peek(i)
+        hex_digit.recognize().parse_peek(i)
     }
     let rhd = yhd(Partial::new(&b"123abcDEF;"[..]));
     assert_eq!(rhd, Ok((Partial::new(semicolon), &b"123abcDEF"[..])));
 
     fn yod(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
-        oct_digit.take().parse_peek(i)
+        oct_digit.recognize().parse_peek(i)
     }
     let rod = yod(Partial::new(&b"1234567;"[..]));
     assert_eq!(rod, Ok((Partial::new(semicolon), &b"1234567"[..])));
 
     fn yan(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
-        alphanumeric.take().parse_peek(i)
+        alphanumeric.recognize().parse_peek(i)
     }
     let ran = yan(Partial::new(&b"123abc;"[..]));
     assert_eq!(ran, Ok((Partial::new(semicolon), &b"123abc"[..])));
 
     fn ys(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
-        space.take().parse_peek(i)
+        space.recognize().parse_peek(i)
     }
     let rs = ys(Partial::new(&b" \t;"[..]));
     assert_eq!(rs, Ok((Partial::new(semicolon), &b" \t"[..])));
 
     fn yms(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
-        multispace.take().parse_peek(i)
+        multispace.recognize().parse_peek(i)
     }
     let rms = yms(Partial::new(&b" \t\r\n;"[..]));
     assert_eq!(rms, Ok((Partial::new(semicolon), &b" \t\r\n"[..])));
@@ -719,12 +705,12 @@ fn partial_take_while_m_n_utf8_full_match_range() {
 
 #[test]
 #[cfg(feature = "std")]
-fn partial_take_take_while0() {
+fn partial_recognize_take_while0() {
     fn x(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
         take_while(0.., AsChar::is_alphanum).parse_peek(i)
     }
     fn y(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
-        unpeek(x).take().parse_peek(i)
+        unpeek(x).recognize().parse_peek(i)
     }
     assert_eq!(
         x(Partial::new(&b"ab."[..])),
@@ -737,9 +723,9 @@ fn partial_take_take_while0() {
 }
 
 #[test]
-fn partial_literal_case_insensitive() {
+fn partial_tag_case_insensitive() {
     fn caseless_bytes(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
-        literal(Caseless("ABcd")).parse_peek(i)
+        tag(Caseless("ABcd")).parse_peek(i)
     }
     assert_eq!(
         caseless_bytes(Partial::new(&b"aBCdefgh"[..])),
@@ -773,7 +759,7 @@ fn partial_literal_case_insensitive() {
     );
 
     fn caseless_str(i: Partial<&str>) -> IResult<Partial<&str>, &str> {
-        literal(Caseless("ABcd")).parse_peek(i)
+        tag(Caseless("ABcd")).parse_peek(i)
     }
     assert_eq!(
         caseless_str(Partial::new("aBCdefgh")),
@@ -805,59 +791,17 @@ fn partial_literal_case_insensitive() {
             ErrorKind::Tag
         )))
     );
-
-    fn matches_kelvin(i: Partial<&str>) -> IResult<Partial<&str>, &str> {
-        literal(Caseless("k")).parse_peek(i)
-    }
-    assert_eq!(
-        matches_kelvin(Partial::new("K")),
-        Err(ErrMode::Backtrack(error_position!(
-            &Partial::new("K"),
-            ErrorKind::Tag
-        )))
-    );
-
-    fn is_kelvin(i: Partial<&str>) -> IResult<Partial<&str>, &str> {
-        literal(Caseless("K")).parse_peek(i)
-    }
-    assert_eq!(
-        is_kelvin(Partial::new("k")),
-        Err(ErrMode::Backtrack(error_position!(
-            &Partial::new("k"),
-            ErrorKind::Tag
-        )))
-    );
 }
 
 #[test]
-fn partial_literal_fixed_size_array() {
+fn partial_tag_fixed_size_array() {
     fn test(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
-        literal([0x42]).parse_peek(i)
+        tag([0x42]).parse_peek(i)
     }
     fn test2(i: Partial<&[u8]>) -> IResult<Partial<&[u8]>, &[u8]> {
-        literal(&[0x42]).parse_peek(i)
+        tag(&[0x42]).parse_peek(i)
     }
     let input = Partial::new(&[0x42, 0x00][..]);
     assert_eq!(test(input), Ok((Partial::new(&b"\x00"[..]), &b"\x42"[..])));
     assert_eq!(test2(input), Ok((Partial::new(&b"\x00"[..]), &b"\x42"[..])));
-}
-
-#[test]
-fn rest_on_slices() {
-    let input: &[u8] = &b"Hello, world!"[..];
-    let empty: &[u8] = &b""[..];
-    assert_parse!(rest.parse_peek(input), Ok((empty, input)));
-}
-
-#[test]
-fn rest_on_strs() {
-    let input: &str = "Hello, world!";
-    let empty: &str = "";
-    assert_parse!(rest.parse_peek(input), Ok((empty, input)));
-}
-
-#[test]
-fn rest_len_on_slices() {
-    let input: &[u8] = &b"Hello, world!"[..];
-    assert_parse!(rest_len.parse_peek(input), Ok((input, input.len())));
 }

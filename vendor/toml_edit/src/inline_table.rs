@@ -146,15 +146,11 @@ impl InlineTable {
     /// In the document above, tables `target` and `target."x86_64/windows.json"` are implicit.
     ///
     /// ```
-    /// # #[cfg(feature = "parse")] {
-    /// # #[cfg(feature = "display")] {
-    /// use toml_edit::DocumentMut;
-    /// let mut doc = "[a]\n[a.b]\n".parse::<DocumentMut>().expect("invalid toml");
+    /// use toml_edit::Document;
+    /// let mut doc = "[a]\n[a.b]\n".parse::<Document>().expect("invalid toml");
     ///
     /// doc["a"].as_table_mut().unwrap().set_implicit(true);
     /// assert_eq!(doc.to_string(), "[a.b]\n");
-    /// # }
-    /// # }
     /// ```
     pub(crate) fn set_implicit(&mut self, implicit: bool) {
         self.implicit = implicit;
@@ -185,28 +181,14 @@ impl InlineTable {
         &self.decor
     }
 
-    /// Returns an accessor to a key's formatting
-    pub fn key(&self, key: &str) -> Option<&'_ Key> {
-        self.items.get(key).map(|kv| &kv.key)
-    }
-
-    /// Returns an accessor to a key's formatting
-    pub fn key_mut(&mut self, key: &str) -> Option<KeyMut<'_>> {
-        self.items.get_mut(key).map(|kv| kv.key.as_mut())
-    }
-
     /// Returns the decor associated with a given key of the table.
-    #[deprecated(since = "0.21.1", note = "Replaced with `key_mut`")]
     pub fn key_decor_mut(&mut self, key: &str) -> Option<&mut Decor> {
-        #![allow(deprecated)]
-        self.items.get_mut(key).map(|kv| kv.key.leaf_decor_mut())
+        self.items.get_mut(key).map(|kv| &mut kv.key.decor)
     }
 
     /// Returns the decor associated with a given key of the table.
-    #[deprecated(since = "0.21.1", note = "Replaced with `key_mut`")]
     pub fn key_decor(&self, key: &str) -> Option<&Decor> {
-        #![allow(deprecated)]
-        self.items.get(key).map(|kv| kv.key.leaf_decor())
+        self.items.get(key).map(|kv| &kv.key.decor)
     }
 
     /// Set whitespace after before element
@@ -219,10 +201,8 @@ impl InlineTable {
         &self.preamble
     }
 
-    /// The location within the original document
-    ///
-    /// This generally requires an [`ImDocument`][crate::ImDocument].
-    pub fn span(&self) -> Option<std::ops::Range<usize>> {
+    /// Returns the location within the original document
+    pub(crate) fn span(&self) -> Option<std::ops::Range<usize>> {
         self.span.clone()
     }
 
@@ -263,14 +243,14 @@ impl InlineTable {
         self.iter().count()
     }
 
-    /// Returns true if the table is empty.
+    /// Returns true iff the table is empty.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     /// Clears the table, removing all key-value pairs. Keeps the allocated memory for reuse.
     pub fn clear(&mut self) {
-        self.items.clear();
+        self.items.clear()
     }
 
     /// Gets the given key's corresponding entry in the Table for in-place manipulation.
@@ -354,7 +334,7 @@ impl InlineTable {
         })
     }
 
-    /// Returns true if the table contains given key.
+    /// Returns true iff the table contains given key.
     pub fn contains_key(&self, key: &str) -> bool {
         if let Some(kv) = self.items.get(key) {
             kv.value.is_value()
@@ -431,10 +411,9 @@ impl InlineTable {
     }
 }
 
-#[cfg(feature = "display")]
 impl std::fmt::Display for InlineTable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        crate::encode::encode_table(self, f, None, ("", ""))
+        crate::encode::Encode::encode(self, f, None, ("", ""))
     }
 }
 
@@ -485,14 +464,13 @@ impl<'s> IntoIterator for &'s InlineTable {
 }
 
 fn decorate_inline_table(table: &mut InlineTable) {
-    for (mut key, value) in table
+    for (key_decor, value) in table
         .items
         .iter_mut()
         .filter(|(_, kv)| kv.value.is_value())
-        .map(|(_, kv)| (kv.key.as_mut(), kv.value.as_value_mut().unwrap()))
+        .map(|(_, kv)| (&mut kv.key.decor, kv.value.as_value_mut().unwrap()))
     {
-        key.leaf_decor_mut().clear();
-        key.dotted_decor_mut().clear();
+        key_decor.clear();
         value.decor_mut().clear();
     }
 }
@@ -568,30 +546,22 @@ impl TableLike for InlineTable {
         self.get_values()
     }
     fn fmt(&mut self) {
-        self.fmt();
+        self.fmt()
     }
     fn sort_values(&mut self) {
-        self.sort_values();
+        self.sort_values()
     }
     fn set_dotted(&mut self, yes: bool) {
-        self.set_dotted(yes);
+        self.set_dotted(yes)
     }
     fn is_dotted(&self) -> bool {
         self.is_dotted()
     }
 
-    fn key(&self, key: &str) -> Option<&'_ Key> {
-        self.key(key)
-    }
-    fn key_mut(&mut self, key: &str) -> Option<KeyMut<'_>> {
-        self.key_mut(key)
-    }
     fn key_decor_mut(&mut self, key: &str) -> Option<&mut Decor> {
-        #![allow(deprecated)]
         self.key_decor_mut(key)
     }
     fn key_decor(&self, key: &str) -> Option<&Decor> {
-        #![allow(deprecated)]
         self.key_decor(key)
     }
 }
@@ -681,7 +651,7 @@ impl<'a> InlineOccupiedEntry<'a> {
         self.entry.get_mut().value.as_value_mut().unwrap()
     }
 
-    /// Converts the `OccupiedEntry` into a mutable reference to the value in the entry
+    /// Converts the OccupiedEntry into a mutable reference to the value in the entry
     /// with a lifetime bound to the map itself
     pub fn into_mut(self) -> &'a mut Value {
         self.entry.into_mut().value.as_value_mut().unwrap()
@@ -722,7 +692,7 @@ impl<'a> InlineVacantEntry<'a> {
         self.entry.key().as_str()
     }
 
-    /// Sets the value of the entry with the `VacantEntry`'s key,
+    /// Sets the value of the entry with the VacantEntry's key,
     /// and returns a mutable reference to it
     pub fn insert(self, value: Value) -> &'a mut Value {
         let entry = self.entry;

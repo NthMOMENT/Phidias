@@ -1,11 +1,11 @@
 use crate::key::Key;
-use crate::parser::error::CustomError;
+use crate::parser::errors::CustomError;
 use crate::repr::Decor;
 use crate::table::TableKeyValue;
-use crate::{ArrayOfTables, ImDocument, InternalString, Item, RawString, Table};
+use crate::{ArrayOfTables, Document, InternalString, Item, RawString, Table};
 
 pub(crate) struct ParseState {
-    root: Table,
+    document: Document,
     trailing: Option<std::ops::Range<usize>>,
     current_table_position: usize,
     current_table: Table,
@@ -14,27 +14,11 @@ pub(crate) struct ParseState {
 }
 
 impl ParseState {
-    pub(crate) fn new() -> Self {
-        let mut root = Table::new();
-        root.span = Some(0..0);
-        Self {
-            root: Table::new(),
-            trailing: None,
-            current_table_position: 0,
-            current_table: root,
-            current_is_array: false,
-            current_table_path: Vec::new(),
-        }
-    }
-
-    pub(crate) fn into_document<S>(mut self, raw: S) -> Result<ImDocument<S>, CustomError> {
+    pub(crate) fn into_document(mut self) -> Result<Document, CustomError> {
         self.finalize_table()?;
-        let trailing = self.trailing.map(RawString::with_span).unwrap_or_default();
-        Ok(ImDocument {
-            root: Item::Table(self.root),
-            trailing,
-            raw,
-        })
+        let trailing = self.trailing.map(RawString::with_span);
+        self.document.trailing = trailing.unwrap_or_default();
+        Ok(self.document)
     }
 
     pub(crate) fn on_ws(&mut self, span: std::ops::Range<usize>) {
@@ -55,21 +39,26 @@ impl ParseState {
 
     pub(crate) fn on_keyval(
         &mut self,
-        path: Vec<Key>,
+        mut path: Vec<Key>,
         mut kv: TableKeyValue,
     ) -> Result<(), CustomError> {
         {
             let mut prefix = self.trailing.take();
+            let first_key = if path.is_empty() {
+                &mut kv.key
+            } else {
+                &mut path[0]
+            };
             let prefix = match (
                 prefix.take(),
-                kv.key.leaf_decor.prefix().and_then(|d| d.span()),
+                first_key.decor.prefix().and_then(|d| d.span()),
             ) {
                 (Some(p), Some(k)) => Some(p.start..k.end),
                 (Some(p), None) | (None, Some(p)) => Some(p),
                 (None, None) => None,
             };
-            kv.key
-                .leaf_decor
+            first_key
+                .decor
                 .set_prefix(prefix.map(RawString::with_span).unwrap_or_default());
         }
 
@@ -116,7 +105,7 @@ impl ParseState {
         debug_assert!(self.current_table_path.is_empty());
 
         // Look up the table on start to ensure the duplicate_key error points to the right line
-        let root = &mut self.root;
+        let root = self.document.as_table_mut();
         let parent_table = Self::descend_path(root, &path[..path.len() - 1], false)?;
         let key = &path[path.len() - 1];
         let entry = parent_table
@@ -150,7 +139,7 @@ impl ParseState {
 
         // 1. Look up the table on start to ensure the duplicate_key error points to the right line
         // 2. Ensure any child tables from an implicit table are preserved
-        let root = &mut self.root;
+        let root = self.document.as_table_mut();
         let parent_table = Self::descend_path(root, &path[..path.len() - 1], false)?;
         let key = &path[path.len() - 1];
         if let Some(entry) = parent_table.remove(key.get()) {
@@ -179,7 +168,7 @@ impl ParseState {
         let mut table = std::mem::take(&mut self.current_table);
         let path = std::mem::take(&mut self.current_table_path);
 
-        let root = &mut self.root;
+        let root = self.document.as_table_mut();
         if path.is_empty() {
             assert!(root.is_empty());
             std::mem::swap(&mut table, root);
@@ -265,7 +254,7 @@ impl ParseState {
                     }
                     table = sweet_child_of_mine;
                 }
-                Item::None => unreachable!(),
+                _ => unreachable!(),
             }
         }
         Ok(table)
@@ -315,5 +304,20 @@ impl ParseState {
         )?;
 
         Ok(())
+    }
+}
+
+impl Default for ParseState {
+    fn default() -> Self {
+        let mut root = Table::new();
+        root.span = Some(0..0);
+        Self {
+            document: Document::new(),
+            trailing: None,
+            current_table_position: 0,
+            current_table: root,
+            current_is_array: false,
+            current_table_path: Vec::new(),
+        }
     }
 }
