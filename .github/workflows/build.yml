@@ -18,7 +18,9 @@ jobs:
           echo "$GITHUB_WORKSPACE/solana-release/bin" >> $GITHUB_PATH
 
       - name: Build
-        run: cargo-build-sbf 2>&1
+        run: |
+          rm -f Cargo.lock
+          cargo-build-sbf 2>&1
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
