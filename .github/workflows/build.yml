@@ -17,9 +17,16 @@ jobs:
           tar -xjf solana-release.tar.bz2
           echo "$GITHUB_WORKSPACE/solana-release/bin" >> $GITHUB_PATH
 
-      - name: Build
+      - name: Download platform-tools and build
         run: |
           rm -f Cargo.lock
+          cargo-build-sbf --force-tools-install 2>&1 || true
+          PT_CARGO=$(find $HOME/.cache/solana -name "cargo" -not -name "*.bak" -type f 2>/dev/null | head -1)
+          echo "Platform-tools cargo: $PT_CARGO"
+          $PT_CARGO --version
+          rm -f Cargo.lock
+          $PT_CARGO generate-lockfile
+          head -3 Cargo.lock
           cargo-build-sbf 2>&1
 
       - name: Upload artifact
