@@ -17,15 +17,6 @@ jobs:
           tar -xjf solana-release.tar.bz2
           echo "$GITHUB_WORKSPACE/solana-release/bin" >> $GITHUB_PATH
 
-      - name: Generate v3 lockfile
-        run: |
-          rm -f Cargo.lock
-          PT_CARGO=$(find $HOME/.cache/solana -name "cargo" -type f | head -1)
-          echo "Using cargo: $PT_CARGO"
-          $PT_CARGO --version
-          CARGO_HOME=$(dirname $(dirname $PT_CARGO)) $PT_CARGO generate-lockfile
-          head -3 Cargo.lock
-
       - name: Build
         run: cargo-build-sbf 2>&1
 
