@@ -1,0 +1,22 @@
+[package]
+name = "phidias_escrow"
+version = "0.1.0"
+description = "Created with SolPy"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "phidias_escrow"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "=0.29.0"
+toml_edit = "=0.20.7"
+toml_datetime = "=0.6.8"
+indexmap = "=2.2.6"
