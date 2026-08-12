@@ -17,7 +17,9 @@ jobs:
           echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
 
       - name: Build
-        run: cargo build-sbf 2>&1
+        run: |
+          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+          cargo build-sbf 2>&1
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
